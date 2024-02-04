@@ -13,3 +13,9 @@ class PhongShader(BaseShader):
 
         super().__init__(vertex_shader_file, fragment_shader_file)
 
+class BlinnPhongShader(BaseShader):
+    def __init__(self):
+        vertex_shader_file = Path(__file__).parent / "glsl/blinn_phong_vertex_shader.glsl"
+        fragment_shader_file = Path(__file__).parent / "glsl/blinn_phong_fragment_shader.glsl"
+
+        super().__init__(vertex_shader_file, fragment_shader_file)
