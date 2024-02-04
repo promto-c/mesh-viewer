@@ -1,75 +1,160 @@
+
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QOpenGLWidget, QVBoxLayout, QWidget
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QVector3D
-from OpenGL.GL import *
-from OpenGL.GL.shaders import compileProgram, compileShader
 import numpy as np
+import pickle
+from PyQt5 import QtWidgets, QtGui, QtCore
+from pymeshlab import MeshSet, Mesh
+from OpenGL import GL
+from meshviewer.shaders.phong_shader import PhongShader
 
+class MeshData:
+    def __init__(self, vertices, faces, normals):
+        self.vertices = vertices
+        self.faces = faces
+        self.normals = normals
 
-class ObjectViewer(QOpenGLWidget):
-    def __init__(self, obj_file_path, parent=None):
-        super(ObjectViewer, self).__init__(parent)
-        self.vertices = []
-        self.is_face = True
+def load_mesh_from_pickle(filename):
+    with open(filename, 'rb') as infile:
+        vertices, faces, normals = pickle.load(infile)
+    return MeshData(vertices, faces, normals)
+
+class ObjectViewer(QtWidgets.QOpenGLWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.meshSet = MeshSet()  # Initialize an empty MeshSet
         self.scale = 1.0
-        self.load_obj(obj_file_path)
-        
         self.last_mouse_position = None
         self.rotation_angle_x = 0.0
         self.rotation_angle_y = 0.0
-
-    def load_obj(self, file_path):
-        self.faces = []
-        with open(file_path, 'r') as file:
-            for line in file:
-                parts = line.strip().split()
-                if parts:
-                    if parts[0] == "v":
-                        self.vertices.append(list(map(float, parts[1:])))
-                    elif parts[0] == "f":
-                        self.faces.append([int(p.split('/')[0]) - 1 for p in parts[1:]])
-
+        self.translation_x = 0.0
+        self.translation_y = 0.0
+        self.middle_mouse_pressed = False
+        self.mode = "face"  # Default mode. Other values can be "wireframe" or "point"
+        self.vaos = []  # List to store Vertex Array Objects for each mesh
+        self.vertexBuffers = []  # List to store Vertex Buffer Objects for vertices
+        self.normalBuffers = []  # List to store Normal Buffer Objects
+        self.indexBuffers = []  # List to store Element Buffer Objects for faces
+        self.phongShader = None  # Placeholder for the PhongShader instance
 
     def initializeGL(self):
-        glEnable(GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_DEPTH_TEST)
+        self.phongShader = PhongShader()  # Initialize PhongShader
+        self.phongShader.create_shader_program()  # Compile and link shaders
+        self.initBuffers()
 
-        vertex_shader = """
-        #version 460
-        layout (location = 0) in vec3 aPos;
-        uniform mat4 model;
-        void main() {
-            gl_Position = model * vec4(aPos, 1.0);
-        }
+    def set_mode(self, mode='wireframe'):
+        self.mode = mode
+        self.update()
+
+    def addMesh(self, mesh_input):
         """
-
-        fragment_shader = """
-        #version 460
-        out vec4 FragColor;
-        void main() {
-            FragColor = vec4(1.0, 1.0, 1.0, 1.0);
-        }
+        Adds a mesh to the viewer. The mesh can be a single Mesh object or a MeshSet.
+        
+        Parameters:
+            mesh (Mesh or MeshSet): The mesh or MeshSet to add.
         """
+        if isinstance(mesh_input, MeshSet):
+            for mesh in mesh_input:
+                print(type(mesh))
+                self._addSingleMesh(mesh)
+        elif isinstance(mesh_input, Mesh):  # Replace 'YourMeshType' with the actual type you're using for single meshes
+            self._addSingleMesh(mesh_input)
+        else:
+            raise TypeError("Unsupported mesh type. Expected Mesh or MeshSet.")
 
-        self.shader = compileProgram(
-            compileShader(vertex_shader, GL_VERTEX_SHADER),
-            compileShader(fragment_shader, GL_FRAGMENT_SHADER)
-        )
+    def _addSingleMesh(self, mesh):
+        if isinstance(mesh, Mesh):
+            self.meshSet.add_mesh(mesh)
+            self.update()
 
-        self.vao = glGenVertexArrays(1)
-        glBindVertexArray(self.vao)
+    def initBuffers(self):
+        for m in self.meshSet:
+            vao = GL.glGenVertexArrays(1)
+            GL.glBindVertexArray(vao)
 
-        self.vbo = glGenBuffers(1)
-        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
-        glBufferData(GL_ARRAY_BUFFER, len(self.vertices) * 3 * 4, np.array(self.vertices, dtype='float32').flatten(), GL_STATIC_DRAW)
+            # Vertices
+            vertices = np.array(m.vertex_matrix(), dtype='float32')
+            vertexBuffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vertexBuffer)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_STATIC_DRAW)
+            GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+            GL.glEnableVertexAttribArray(0)
 
-        self.ebo = glGenBuffers(1)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, len(self.faces) * 3 * 4, np.array(self.faces, dtype='uint32').flatten(), GL_STATIC_DRAW)
+            # Normals
+            normals = np.array(m.vertex_normal_matrix(), dtype='float32')
+            normalBuffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, normalBuffer)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, normals.nbytes, normals, GL.GL_STATIC_DRAW)
+            GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+            GL.glEnableVertexAttribArray(1)
 
+            # Faces
+            faces = np.array(m.face_matrix().flatten(), dtype='uint32')
+            indexBuffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, indexBuffer)
+            GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, faces.nbytes, faces, GL.GL_STATIC_DRAW)
 
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, None)
-        glEnableVertexAttribArray(0)
+            # Store VAO and buffers
+            self.vaos.append(vao)
+            self.vertexBuffers.append(vertexBuffer)
+            self.normalBuffers.append(normalBuffer)
+            self.indexBuffers.append(indexBuffer)
+
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glBindVertexArray(0)
+
+    def paintGL(self):
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        GL.glClearColor(0.2, 0.3, 0.3, 1.0)
+
+        # Set view, projection, and model matrices via PhongShader
+        view = QtGui.QMatrix4x4()
+        projection = QtGui.QMatrix4x4()
+        projection.perspective(45.0, self.width() / self.height(), 0.1, 100.0)
+        view.translate(0, 0, -10)  # Adjust as needed
+
+        model = QtGui.QMatrix4x4()
+        model.translate(self.translation_x, self.translation_y, -5)
+        model.rotate(self.rotation_angle_x, 1, 0, 0)
+        model.rotate(self.rotation_angle_y, 0, 1, 0)
+        model.scale(self.scale)
+
+        # Activate the shader program
+        self.phongShader.use()
+
+        # Set matrix uniforms
+        self.phongShader.set_uniform("model", model.data(), "4fv")
+        self.phongShader.set_uniform("view", view.data(), "4fv")
+        self.phongShader.set_uniform("projection", projection.data(), "4fv")
+
+        # Set light and view positions
+        self.phongShader.set_uniform("lightPos", (1.2, 1.0, 2.0), "3f")
+        self.phongShader.set_uniform("viewPos", (0.0, 0.0, 0.0), "3f")
+
+        # Set light and object colors
+        self.phongShader.set_uniform("lightColor", (1.0, 1.0, 1.0), "3f")  # White light
+        self.phongShader.set_uniform("objectColor", (1.0, 0.5, 0.31), "3f")  # Some orange color
+
+        for i, vao in enumerate(self.vaos):
+            GL.glBindVertexArray(vao)
+            if self.mode == "wireframe":
+                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_LINE)
+            elif self.mode == "face":
+                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_FILL)
+            elif self.mode == "point":
+                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_POINT)
+
+            mesh = self.meshSet[i]
+            if self.mode == "point":
+                GL.glDrawArrays(GL.GL_POINTS, 0, mesh.vertex_number())
+            else:
+                GL.glDrawElements(GL.GL_TRIANGLES, mesh.face_number() * 3, GL.GL_UNSIGNED_INT, None)
+
+        GL.glBindVertexArray(0)
+        GL.glUseProgram(0)
+
+    def resizeGL(self, width, height):
+        GL.glViewport(0, 0, width, max(1, height))
 
     def wheelEvent(self, event):
         degrees = event.angleDelta().y() / 8
@@ -83,75 +168,56 @@ class ObjectViewer(QOpenGLWidget):
 
     def mousePressEvent(self, event):
         self.last_mouse_position = event.pos()
+        if event.button() == QtCore.Qt.MouseButton.MiddleButton:  # Check if the middle button is pressed
+            self.middle_mouse_pressed = True
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == QtCore.Qt.MouseButton.MiddleButton:
+            self.middle_mouse_pressed = False
 
     def mouseMoveEvent(self, event):
         if self.last_mouse_position:
             dx = event.x() - self.last_mouse_position.x()
             dy = event.y() - self.last_mouse_position.y()
-            
-            self.rotation_angle_x += dy * 0.5  # Adjust the factor for rotation speed
-            self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
-            
+
+            if event.buttons() == QtCore.Qt.MouseButton.LeftButton:
+                self.rotation_angle_x += dy * 0.5  # Adjust the factor for rotation speed
+                self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
+            elif self.middle_mouse_pressed:
+                # Adjust translation based on mouse movement
+                self.translation_x += dx * 0.01  # Adjust these factors as needed
+                self.translation_y -= dy * 0.01  # Invert dy for intuitive direction
+
             self.update()
 
         self.last_mouse_position = event.pos()
 
-    def paintGL(self):
-        glClearColor(0.2, 0.3, 0.3, 1.0)
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-        glUseProgram(self.shader)
-
-        model_location = glGetUniformLocation(self.shader, "model")
-        glUniformMatrix4fv(model_location, 1, GL_FALSE, self.get_model_matrix())
-
-        glBindVertexArray(self.vao)
-        
-        if self.is_face:
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE) # draw as wireframe
-            glDrawElements(GL_TRIANGLES, len(self.faces) * 3, GL_UNSIGNED_INT, None)
-        else:
-            glDrawArrays(GL_POINTS, 0, len(self.vertices))
-
-    def toggle_face(self):
-        self.is_face = not self.is_face
-
-    def get_model_matrix(self):
-        from PyQt5.QtGui import QMatrix4x4
-
-        model_matrix = QMatrix4x4()
-        model_matrix.scale(self.scale)
-        model_matrix.rotate(self.rotation_angle_x, 1, 0, 0)
-        model_matrix.rotate(self.rotation_angle_y, 0, 1, 0)
-
-        return model_matrix.data()
-
-    def resizeGL(self, width, height):
-        glViewport(0, 0, width, height)
-
-
-class MainWindow(QMainWindow):
-    def __init__(self, obj_file_path):
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self, file_path):
         super(MainWindow, self).__init__()
-
-        self.central_widget = QWidget()
+        self.central_widget = QtWidgets.QWidget()
         self.setCentralWidget(self.central_widget)
+        self.layout = QtWidgets.QVBoxLayout(self.central_widget)
 
-        self.layout = QVBoxLayout(self.central_widget)
-
-        self.object_viewer = ObjectViewer(obj_file_path)
+        mesh_set = MeshSet()
+        mesh_set.load_new_mesh(file_path)
+        self.object_viewer = ObjectViewer()
+        self.object_viewer.addMesh(mesh_set)
+        
         self.layout.addWidget(self.object_viewer)
-
         self.setWindowTitle("Simple PyQt OBJ Viewer")
         self.resize(800, 600)
 
-def main():
-    app = QApplication(sys.argv)
-    window = MainWindow("meshviewer/example_models/cow.obj")
-    window.show()
+if __name__ == '__main__':
+    # Set up QSurfaceFormat for antialiasing
+    format = QtGui.QSurfaceFormat()
+    format.setSamples(4)  # Set the number of samples for multisampling
+    format.setDepthBufferSize(24)
+    QtGui.QSurfaceFormat.setDefaultFormat(format)
+
+    app = QtWidgets.QApplication(sys.argv)
+    # meshData = load_mesh_from_pickle('mesh_data.pkl')
+    # vertices, faces, normals = meshData.vertices, meshData.faces, meshData.normals
+    mainWindow = MainWindow('meshviewer\example_models\Room.obj')
+    mainWindow.show()
     sys.exit(app.exec_())
-
-
-if __name__ == "__main__":
-    main()
