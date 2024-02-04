@@ -5,7 +5,7 @@ import pickle
 from PyQt5 import QtWidgets, QtGui, QtCore
 from pymeshlab import MeshSet, Mesh
 from OpenGL import GL
-from meshviewer.shaders.phong_shader import PhongShader
+from meshviewer.shaders.phong_shader import PhongShader, BlinnPhongShader
 
 class MeshData:
     def __init__(self, vertices, faces, normals):
@@ -38,7 +38,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
-        self.phongShader = PhongShader()  # Initialize PhongShader
+        self.phongShader = BlinnPhongShader()  # Initialize PhongShader
         self.phongShader.create_shader_program()  # Compile and link shaders
         self.initBuffers()
 
