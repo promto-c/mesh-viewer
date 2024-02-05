@@ -3,15 +3,45 @@ import sys
 import numpy as np
 import pickle
 from PyQt5 import QtWidgets, QtGui, QtCore
-from pymeshlab import MeshSet, Mesh
+
+try:
+    from pymeshlab import MeshSet, Mesh
+except:
+    class MeshSet(list):
+        ...
+        def load_new_mesh(self, file_path):
+            ...
+
+        def add_mesh(self, mesh):
+            self.append(mesh)
+
+    class Mesh:
+        ...
+
 from OpenGL import GL
 from meshviewer.shaders.phong_shader import PhongShader, BlinnPhongShader
+
 
 class MeshData:
     def __init__(self, vertices, faces, normals):
         self.vertices = vertices
         self.faces = faces
         self.normals = normals
+
+    def vertex_matrix(self):
+        return self.vertices
+
+    def vertex_normal_matrix(self):
+        return self.normals
+    
+    def face_matrix(self):
+        return self.faces
+    
+    def face_number(self):
+        return len(self.faces)
+    
+    def vertex_number(self):
+        return len(self.vertices)
 
 def load_mesh_from_pickle(filename):
     with open(filename, 'rb') as infile:
@@ -29,7 +59,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.translation_x = 0.0
         self.translation_y = 0.0
         self.middle_mouse_pressed = False
-        self.mode = "face"  # Default mode. Other values can be "wireframe" or "point"
+        self.mode = "wireframe"  # Default mode. Other values can be "wireframe" or "point"
         self.vaos = []  # List to store Vertex Array Objects for each mesh
         self.vertexBuffers = []  # List to store Vertex Buffer Objects for vertices
         self.normalBuffers = []  # List to store Normal Buffer Objects
@@ -55,25 +85,23 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         """
         if isinstance(mesh_input, MeshSet):
             for mesh in mesh_input:
-                print(type(mesh))
                 self._addSingleMesh(mesh)
-        elif isinstance(mesh_input, Mesh):  # Replace 'YourMeshType' with the actual type you're using for single meshes
-            self._addSingleMesh(mesh_input)
         else:
-            raise TypeError("Unsupported mesh type. Expected Mesh or MeshSet.")
+            self._addSingleMesh(mesh_input)
 
     def _addSingleMesh(self, mesh):
-        if isinstance(mesh, Mesh):
-            self.meshSet.add_mesh(mesh)
-            self.update()
+        self.meshSet.add_mesh(mesh)
+        self.update()
+
+    # def _addMeshData(self, mesh)
 
     def initBuffers(self):
-        for m in self.meshSet:
+        for mesh in self.meshSet:
             vao = GL.glGenVertexArrays(1)
             GL.glBindVertexArray(vao)
 
             # Vertices
-            vertices = np.array(m.vertex_matrix(), dtype='float32')
+            vertices = np.array(mesh.vertex_matrix(), dtype='float32')
             vertexBuffer = GL.glGenBuffers(1)
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vertexBuffer)
             GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_STATIC_DRAW)
@@ -81,7 +109,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glEnableVertexAttribArray(0)
 
             # Normals
-            normals = np.array(m.vertex_normal_matrix(), dtype='float32')
+            normals = np.array(mesh.vertex_normal_matrix(), dtype='float32')
             normalBuffer = GL.glGenBuffers(1)
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, normalBuffer)
             GL.glBufferData(GL.GL_ARRAY_BUFFER, normals.nbytes, normals, GL.GL_STATIC_DRAW)
@@ -89,7 +117,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glEnableVertexAttribArray(1)
 
             # Faces
-            faces = np.array(m.face_matrix().flatten(), dtype='uint32')
+            faces = np.array(mesh.face_matrix().flatten(), dtype='uint32')
             indexBuffer = GL.glGenBuffers(1)
             GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, indexBuffer)
             GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, faces.nbytes, faces, GL.GL_STATIC_DRAW)
@@ -199,11 +227,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QtWidgets.QVBoxLayout(self.central_widget)
 
-        mesh_set = MeshSet()
-        mesh_set.load_new_mesh(file_path)
         self.object_viewer = ObjectViewer()
-        self.object_viewer.addMesh(mesh_set)
-        
+
+        if file_path.endswith('pkl'):
+            mesh_data = load_mesh_from_pickle(file_path)
+            self.object_viewer.addMesh(mesh_data)
+        else:
+            mesh_set = MeshSet()
+            mesh_set.load_new_mesh(file_path)
+            self.object_viewer.addMesh(mesh_set)
+            
         self.layout.addWidget(self.object_viewer)
         self.setWindowTitle("Simple PyQt OBJ Viewer")
         self.resize(800, 600)
@@ -216,8 +249,8 @@ if __name__ == '__main__':
     QtGui.QSurfaceFormat.setDefaultFormat(format)
 
     app = QtWidgets.QApplication(sys.argv)
-    # meshData = load_mesh_from_pickle('mesh_data.pkl')
-    # vertices, faces, normals = meshData.vertices, meshData.faces, meshData.normals
-    mainWindow = MainWindow('meshviewer\example_models\Room.obj')
+
+    mainWindow = MainWindow('mesh_data.pkl')
+    # mainWindow = MainWindow('meshviewer\example_models\Room.obj')
     mainWindow.show()
     sys.exit(app.exec_())
