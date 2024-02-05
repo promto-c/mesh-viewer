@@ -2,44 +2,30 @@ import pymeshlab
 import pickle
 import numpy as np
 
-def load_and_combine_meshes(file_path):
+def load_mesh(file_path: str):
+    """Loads a mesh from the given file path and returns the combined vertices, faces, and normals.
+    
+    Args:
+        file_path: str, the path to the mesh file.
+    
+    Returns:
+        tuple of np.ndarray: combined vertices, faces, and normals of the mesh.
+    """
     # Initialize MeshSet and load the specified mesh file
     mesh_set = pymeshlab.MeshSet()
     mesh_set.load_new_mesh(file_path)
 
-    # Initialize lists to store mesh data from all meshes
-    vertices_list = []
-    faces_list = []
-    normals_list = []
+    # Check if the mesh set is empty
+    if mesh_set.mesh_number() == 0:
+        raise ValueError("No meshes found in the file.")
 
-    # Initialize face offset for correctly indexing faces in combined mesh
-    face_offset = 0
+    # Use list comprehension for efficiency and readability
+    meshes = [mesh_set.mesh(i) for i in range(mesh_set.mesh_number())]
 
-    # Iterate through each mesh in the MeshSet
-    for i in range(mesh_set.mesh_number()):
-        mesh_set.set_current_mesh(i)
-        current_mesh = mesh_set.current_mesh()
-
-        # Extract vertices, faces, and normals from the current mesh
-        vertices = current_mesh.vertex_matrix()
-        faces = current_mesh.face_matrix() + face_offset  # Adjust face indices based on the offset
-        normals = current_mesh.vertex_normal_matrix()
-
-        # Append current mesh data to the lists
-        vertices_list.append(vertices)
-        faces_list.append(faces)
-        normals_list.append(normals)
-
-        # Update the face offset for the next mesh
-        face_offset += vertices.shape[0]
-
-    # Combine all mesh data into single arrays if there are multiple meshes
-    if mesh_set.mesh_number() > 1:
-        combined_vertices = np.vstack(vertices_list)
-        combined_faces = np.vstack(faces_list)
-        combined_normals = np.vstack(normals_list)
-    else:
-        combined_vertices, combined_faces, combined_normals = vertices_list[0], faces_list[0], normals_list[0]
+    # Combine arrays
+    combined_vertices = np.concatenate([m.vertex_matrix() for m in meshes])
+    combined_faces = np.concatenate([m.face_matrix() + sum([v.vertex_matrix().shape[0] for v in meshes[:i]]) for i, m in enumerate(meshes)])
+    combined_normals = np.concatenate([m.vertex_normal_matrix() for m in meshes])
 
     return combined_vertices, combined_faces, combined_normals
 
@@ -50,9 +36,9 @@ def save_combined_mesh_data(file_path, mesh_data):
 
 if __name__ == "__main__":
     # Specify the path to the mesh file
-    mesh_file_path = 'meshviewer\example_models\Room.obj'
-    combined_mesh_data = load_and_combine_meshes(mesh_file_path)
+    mesh_file_path = 'head.stl'
+    mesh_data = load_mesh(mesh_file_path)
 
     # Specify the output file path for the combined mesh data
     output_file_path = 'mesh_data.pkl'
-    save_combined_mesh_data(output_file_path, combined_mesh_data)
+    save_combined_mesh_data(output_file_path, mesh_data)
