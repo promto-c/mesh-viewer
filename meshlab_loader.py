@@ -23,9 +23,9 @@ def load_mesh(file_path: str):
     meshes = [mesh_set.mesh(i) for i in range(mesh_set.mesh_number())]
 
     # Combine arrays
-    combined_vertices = np.concatenate([m.vertex_matrix() for m in meshes])
-    combined_faces = np.concatenate([m.face_matrix() + sum([v.vertex_matrix().shape[0] for v in meshes[:i]]) for i, m in enumerate(meshes)])
-    combined_normals = np.concatenate([m.vertex_normal_matrix() for m in meshes])
+    combined_vertices = np.concatenate([mesh.vertex_matrix() for mesh in meshes])
+    combined_faces = np.concatenate([mesh.face_matrix() + sum([v.vertex_matrix().shape[0] for v in meshes[:i]]) for i, mesh in enumerate(meshes)])
+    combined_normals = np.concatenate([mesh.vertex_normal_matrix() for mesh in meshes])
 
     return combined_vertices, combined_faces, combined_normals
 
