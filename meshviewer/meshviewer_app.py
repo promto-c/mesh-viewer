@@ -1,7 +1,6 @@
 
 import sys
 import numpy as np
-import pickle
 from PyQt5 import QtWidgets, QtGui, QtCore
 
 try:
@@ -20,33 +19,7 @@ except:
 
 from OpenGL import GL
 from meshviewer.shaders.phong_shader import PhongShader, BlinnPhongShader
-
-
-class MeshData:
-    def __init__(self, vertices, faces, normals):
-        self.vertices = vertices
-        self.faces = faces
-        self.normals = normals
-
-    def vertex_matrix(self):
-        return self.vertices
-
-    def vertex_normal_matrix(self):
-        return self.normals
-    
-    def face_matrix(self):
-        return self.faces
-    
-    def face_number(self):
-        return len(self.faces)
-    
-    def vertex_number(self):
-        return len(self.vertices)
-
-def load_mesh_from_pickle(filename):
-    with open(filename, 'rb') as infile:
-        vertices, faces, normals = pickle.load(infile)
-    return MeshData(vertices, faces, normals)
+from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
 class ObjectViewer(QtWidgets.QOpenGLWidget):
     def __init__(self, parent=None):
@@ -221,7 +194,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.last_mouse_position = event.pos()
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self, file_path):
+    def __init__(self, file_path: str):
         super(MainWindow, self).__init__()
         self.central_widget = QtWidgets.QWidget()
         self.setCentralWidget(self.central_widget)
@@ -229,8 +202,11 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.object_viewer = ObjectViewer()
 
-        if file_path.endswith('pkl'):
+        if file_path.endswith('.pkl'):
             mesh_data = load_mesh_from_pickle(file_path)
+            self.object_viewer.addMesh(mesh_data)
+        elif file_path.endswith('.npz'):
+            mesh_data = load_mesh_from_npz(file_path)
             self.object_viewer.addMesh(mesh_data)
         else:
             mesh_set = MeshSet()
@@ -250,7 +226,7 @@ if __name__ == '__main__':
 
     app = QtWidgets.QApplication(sys.argv)
 
-    mainWindow = MainWindow('mesh_data.pkl')
+    mainWindow = MainWindow('mesh_data.npz')
     # mainWindow = MainWindow('meshviewer\example_models\Room.obj')
     mainWindow.show()
     sys.exit(app.exec_())
