@@ -14,6 +14,23 @@ except:
         def add_mesh(self, mesh):
             self.append(mesh)
 
+        # NOTE:
+        def get_bounding_box(self):
+            min_x, max_x, min_y, max_y, min_z, max_z = float('inf'), float('-inf'), float('inf'), float('-inf'), float('inf'), float('-inf')
+
+            for mesh in self.meshes:  # Assuming the MeshSet stores a list of Mesh objects in self.meshes
+                mesh_min_x, mesh_max_x, mesh_min_y, mesh_max_y, mesh_min_z, mesh_max_z = mesh.get_bounding_box()
+
+                # Update the overall bounding box
+                min_x = min(min_x, mesh_min_x)
+                max_x = max(max_x, mesh_max_x)
+                min_y = min(min_y, mesh_min_y)
+                max_y = max(max_y, mesh_max_y)
+                min_z = min(min_z, mesh_min_z)
+                max_z = max(max_z, mesh_max_z)
+
+            return (min_x, max_x, min_y, max_y, min_z, max_z)
+
     class Mesh:
         ...
 
@@ -29,8 +46,10 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.last_mouse_position = None
         self.rotation_angle_x = 0.0
         self.rotation_angle_y = 0.0
+        # self.rotation_angle_z = -5.0
         self.translation_x = 0.0
         self.translation_y = 0.0
+        # self.translation_z = 0.0
         self.middle_mouse_pressed = False
         self.mode = "wireframe"  # Default mode. Other values can be "wireframe" or "point"
         self.vaos = []  # List to store Vertex Array Objects for each mesh
@@ -39,11 +58,19 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.indexBuffers = []  # List to store Element Buffer Objects for faces
         self.phongShader = None  # Placeholder for the PhongShader instance
 
+        # Initialize bounding box corners
+        self.min_point = (float('inf'), float('inf'), float('inf'))
+        self.max_point = (float('-inf'), float('-inf'), float('-inf'))
+
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
         self.phongShader = BlinnPhongShader()  # Initialize PhongShader
         self.phongShader.create_shader_program()  # Compile and link shaders
         self.initBuffers()
+
+        # NOTE: WIP
+        # Set initial view transformation parameters based on the bounding box
+        self.init_view_transformation()
 
     def set_mode(self, mode='wireframe'):
         self.mode = mode
@@ -69,6 +96,10 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     # def _addMeshData(self, mesh)
 
     def initBuffers(self):
+        # Initialize min and max points with opposite infinity values
+        overall_min_point = np.array([np.inf, np.inf, np.inf])
+        overall_max_point = np.array([-np.inf, -np.inf, -np.inf])
+
         for mesh in self.meshSet:
             vao = GL.glGenVertexArrays(1)
             GL.glBindVertexArray(vao)
@@ -104,6 +135,41 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             GL.glBindVertexArray(0)
 
+            # NOTE: WIP
+            # Get bounding box
+            bbox = mesh.bounding_box()
+            min_point = np.array(bbox.min())
+            max_point = np.array(bbox.max())
+
+            # Update the overall bounding box
+            overall_min_point = np.minimum(overall_min_point, min_point)
+            overall_max_point = np.maximum(overall_max_point, max_point)
+
+        self.min_point = tuple(overall_min_point.tolist())
+        self.max_point = tuple(overall_max_point.tolist())
+
+    # NOTE: WIP
+    def init_view_transformation(self):
+        # Calculate the center of the bounding box
+        # center = tuple((self.min_point[i] + self.max_point[i]) / 2 for i in range(3))
+
+        # Calculate the dimensions of the bounding box
+        dimensions = tuple(self.max_point[i] - self.min_point[i] for i in range(3))
+        max_dimension = max(dimensions)
+
+        # Set initial scale to fit the object within the view nicely
+        self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
+
+        # # Set initial rotation angles for a good view
+        # self.rotation_angle_x = 100.0  # Slight tilt
+        # self.rotation_angle_y = -180.0  # Diagonal view
+        # self.rotation_angle_z = 120.0  # Diagonal view
+
+        # Set initial translation to center the object in the view
+        # self.translation_x = -center[0]
+        # self.translation_y = -center[1]
+        # self.translation_z = -center[2]
+
     def paintGL(self):
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         GL.glClearColor(0.2, 0.3, 0.3, 1.0)
@@ -112,12 +178,13 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         view = QtGui.QMatrix4x4()
         projection = QtGui.QMatrix4x4()
         projection.perspective(45.0, self.width() / self.height(), 0.1, 100.0)
-        view.translate(0, 0, -10)  # Adjust as needed
+        # view.translate(0, 0, -10)  # Adjust as needed
 
         model = QtGui.QMatrix4x4()
         model.translate(self.translation_x, self.translation_y, -5)
         model.rotate(self.rotation_angle_x, 1, 0, 0)
         model.rotate(self.rotation_angle_y, 0, 1, 0)
+        # model.rotate(self.rotation_angle_z, 0, 0, 1)
         model.scale(self.scale)
 
         # Activate the shader program
