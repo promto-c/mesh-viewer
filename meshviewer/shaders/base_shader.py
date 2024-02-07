@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Any
 from OpenGL import GL
 
 class BaseShader:
@@ -85,31 +85,40 @@ class BaseShader:
         """Activates this shader program for use in the rendering pipeline."""
         GL.glUseProgram(self.program)
 
-    def set_uniform(self, name: str, value: Tuple[float, ...], uniform_type: str = "1f") -> None:
-        """Sets a uniform value in the shader program.
+
+    def set_uniform(self, name: str, value: Any) -> None:
+        """Sets a uniform value in the shader program, inferring the type from the value.
 
         Args:
             name: The name of the uniform variable in the shader.
-            value: The value to set the uniform to.
-            uniform_type: The type of the uniform (e.g., "1f" for a float, "3f" for a vec3).
+            value: The value to set the uniform to, type is inferred from the value.
 
         Raises:
-            ValueError: If an unsupported uniform type or value is provided.
+            ValueError: If the uniform name is not found or if the value type is unsupported.
         """
-        location: GL.GLint = GL.glGetUniformLocation(self.program, name)
+        location = GL.glGetUniformLocation(self.program, name)
         if location == -1:
             raise ValueError(f"Uniform '{name}' not found in shader.")
 
-        # Handle different types of uniforms
-        if uniform_type == "1f":
-            GL.glUniform1f(location, value[0])
-        elif uniform_type == "3f" and len(value) == 3:
-            GL.glUniform3f(location, *value)
-        elif uniform_type == "4fv" and isinstance(value, (list, tuple)) and len(value) == 16:
-            # Assuming the matrix is provided as a flat list or tuple of 16 values
-            GL.glUniformMatrix4fv(location, 1, GL.GL_FALSE, value)
+        if isinstance(value, int):
+            GL.glUniform1i(location, value)
+        elif isinstance(value, float):
+            GL.glUniform1f(location, value)
+        elif isinstance(value, tuple) or isinstance(value, list):
+            if len(value) == 2:
+                GL.glUniform2f(location, *value)
+            elif len(value) == 3:
+                GL.glUniform3f(location, *value)
+            elif len(value) == 4:
+                GL.glUniform4f(location, *value)
+            elif len(value) == 9:
+                GL.glUniformMatrix3fv(location, 1, GL.GL_FALSE, value)
+            elif len(value) == 16:
+                GL.glUniformMatrix4fv(location, 1, GL.GL_FALSE, value)
+            else:
+                raise ValueError(f"Unsupported uniform array length: {len(value)} for '{name}'.")
         else:
-            raise ValueError(f"Unsupported uniform type or value: {uniform_type}, {value}")
+            raise ValueError(f"Unsupported uniform type for '{name}': {type(value)}.")
 
     def release(self) -> None:
         """Deactivates the shader program."""

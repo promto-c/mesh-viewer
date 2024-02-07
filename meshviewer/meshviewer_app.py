@@ -35,7 +35,7 @@ except:
         ...
 
 from OpenGL import GL
-from meshviewer.shaders.phong_shader import PhongShader, BlinnPhongShader
+from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianShader
 from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
 class ObjectViewer(QtWidgets.QOpenGLWidget):
@@ -56,7 +56,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.vertexBuffers = []  # List to store Vertex Buffer Objects for vertices
         self.normalBuffers = []  # List to store Normal Buffer Objects
         self.indexBuffers = []  # List to store Element Buffer Objects for faces
-        self.phongShader = None  # Placeholder for the PhongShader instance
+        self.shader = None  # Placeholder for the PhongShader instance
 
         # Initialize bounding box corners
         self.min_point = (float('inf'), float('inf'), float('inf'))
@@ -64,8 +64,8 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
-        self.phongShader = BlinnPhongShader()  # Initialize PhongShader
-        self.phongShader.create_shader_program()  # Compile and link shaders
+        self.shader = PhongShader()  # Initialize PhongShader
+        self.shader.create_shader_program()  # Compile and link shaders
         self.initBuffers()
 
         # NOTE: WIP
@@ -188,20 +188,24 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         model.scale(self.scale)
 
         # Activate the shader program
-        self.phongShader.use()
+        self.shader.use()
 
         # Set matrix uniforms
-        self.phongShader.set_uniform("model", model.data(), "4fv")
-        self.phongShader.set_uniform("view", view.data(), "4fv")
-        self.phongShader.set_uniform("projection", projection.data(), "4fv")
+        self.shader.set_uniform("model", model.data())
+        self.shader.set_uniform("view", view.data())
+        self.shader.set_uniform("projection", projection.data())
 
         # Set light and view positions
-        self.phongShader.set_uniform("lightPos", (1.2, 1.0, 2.0), "3f")
-        self.phongShader.set_uniform("viewPos", (0.0, 0.0, 0.0), "3f")
+        self.shader.set_uniform("lightPos", (1.2, 1.0, 2.0))
+        self.shader.set_uniform("viewPos", (0.0, 0.0, 0.0))
 
         # Set light and object colors
-        self.phongShader.set_uniform("lightColor", (1.0, 1.0, 1.0), "3f")  # White light
-        self.phongShader.set_uniform("objectColor", (1.0, 0.5, 0.31), "3f")  # Some orange color
+        self.shader.set_uniform("lightColor", (1.0, 1.0, 1.0))  # White light
+        self.shader.set_uniform("objectColor", (1.0, 0.5, 0.31))  # Some orange color
+
+        # self.shader.set_uniform("ambientStrength", 0.1)  # Some orange color
+        # self.shader.set_uniform("specularStrength", 0.5)  # Some orange color
+        # self.shader.set_uniform("shininess", 32.0)  # Some orange color
 
         for i, vao in enumerate(self.vaos):
             GL.glBindVertexArray(vao)
