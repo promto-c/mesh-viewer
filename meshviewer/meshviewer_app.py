@@ -62,6 +62,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.min_point = (float('inf'), float('inf'), float('inf'))
         self.max_point = (float('-inf'), float('-inf'), float('-inf'))
 
+        self.near_clip = 0.1
+        self.far_clip = 1000
+
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
         self.shader = PhongShader()  # Initialize PhongShader
@@ -177,7 +180,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         # Set view, projection, and model matrices via PhongShader
         view = QtGui.QMatrix4x4()
         projection = QtGui.QMatrix4x4()
-        projection.perspective(45.0, self.width() / self.height(), 0.1, 100.0)
+        projection.perspective(45.0, self.width() / self.height(), self.near_clip, self.far_clip)
         # view.translate(0, 0, -10)  # Adjust as needed
 
         model = QtGui.QMatrix4x4()
