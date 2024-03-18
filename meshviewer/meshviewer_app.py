@@ -39,19 +39,29 @@ from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianS
 from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
 class ObjectViewer(QtWidgets.QOpenGLWidget):
-    def __init__(self, parent=None):
+
+    RENDER_MODES = [
+        'wireframe',
+        'face',
+        'point',
+    ]
+
+    def __init__(self, parent=None, mode=RENDER_MODES[0]):
         super().__init__(parent)
         self.meshSet = MeshSet()  # Initialize an empty MeshSet
-        self.scale = 1.0
+        # self.scale = 1.0
         self.last_mouse_position = None
         self.rotation_angle_x = 0.0
         self.rotation_angle_y = 0.0
-        # self.rotation_angle_z = -5.0
+        self.rotation_angle_z = 0.0
         self.translation_x = 0.0
         self.translation_y = 0.0
-        # self.translation_z = 0.0
+        self.translation_z = 0.0
+
+        self.fov = 45.0
+
         self.middle_mouse_pressed = False
-        self.mode = "wireframe"  # Default mode. Other values can be "wireframe" or "point"
+        self.mode = mode  # Default mode. Other values can be "wireframe" or "point"
         self.vaos = []  # List to store Vertex Array Objects for each mesh
         self.vertexBuffers = []  # List to store Vertex Buffer Objects for vertices
         self.normalBuffers = []  # List to store Normal Buffer Objects
@@ -95,8 +105,6 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     def _addSingleMesh(self, mesh):
         self.meshSet.add_mesh(mesh)
         self.update()
-
-    # def _addMeshData(self, mesh)
 
     def initBuffers(self):
         # Initialize min and max points with opposite infinity values
@@ -161,7 +169,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         max_dimension = max(dimensions)
 
         # Set initial scale to fit the object within the view nicely
-        self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
+        # self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
 
         # # Set initial rotation angles for a good view
         # self.rotation_angle_x = 100.0  # Slight tilt
@@ -180,15 +188,14 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         # Set view, projection, and model matrices via PhongShader
         view = QtGui.QMatrix4x4()
         projection = QtGui.QMatrix4x4()
-        projection.perspective(45.0, self.width() / self.height(), self.near_clip, self.far_clip)
+        projection.perspective(self.fov, self.width() / self.height(), self.near_clip, self.far_clip)
         # view.translate(0, 0, -10)  # Adjust as needed
 
         model = QtGui.QMatrix4x4()
-        model.translate(self.translation_x, self.translation_y, -5)
+        model.translate(self.translation_x, self.translation_y, self.translation_z)
         model.rotate(self.rotation_angle_x, 1, 0, 0)
         model.rotate(self.rotation_angle_y, 0, 1, 0)
-        # model.rotate(self.rotation_angle_z, 0, 0, 1)
-        model.scale(self.scale)
+        model.rotate(self.rotation_angle_z, 0, 0, 1)
 
         # Activate the shader program
         self.shader.use()
@@ -206,9 +213,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader.set_uniform("lightColor", (1.0, 1.0, 1.0))  # White light
         self.shader.set_uniform("objectColor", (1.0, 0.5, 0.31))  # Some orange color
 
-        # self.shader.set_uniform("ambientStrength", 0.1)  # Some orange color
-        # self.shader.set_uniform("specularStrength", 0.5)  # Some orange color
-        # self.shader.set_uniform("shininess", 32.0)  # Some orange color
+        self.shader.set_uniform("ambientStrength", 0.1)  # Some orange color
+        self.shader.set_uniform("specularStrength", 0.5)  # Some orange color
+        self.shader.set_uniform("shininess", 32.0)  # Some orange color
 
         for i, vao in enumerate(self.vaos):
             GL.glBindVertexArray(vao)
@@ -231,15 +238,39 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     def resizeGL(self, width, height):
         GL.glViewport(0, 0, width, max(1, height))
 
-    def wheelEvent(self, event):
+    def wheelEvent(self, event: QtGui.QWheelEvent):
+        """Handles mouse wheel events to adjust camera properties for zooming and moving in 3D space.
+
+        Zooming is achieved by adjusting the field of view (FOV), and moving the object closer or further
+        away is done by changing the object's z-axis position. The Ctrl modifier key is used to switch between
+        these modes.
+
+        - Scrolling with Ctrl pressed adjusts the FOV, providing a zoom effect. A smaller FOV zooms in, making
+        objects appear larger, while a larger FOV zooms out.
+        - Scrolling without the Ctrl key adjusts the object's z-axis position, moving the object in or out.
+
+        Args:
+            event (QtGui.QWheelEvent):The event triggered by scrolling the mouse wheel.
+
+        Usage:
+            Scroll while pressing Ctrl to zoom in or out. This modifies `self.fov`.
+            Scroll without pressing Ctrl to move the object in or out along the z-axis. This modifies `self.camera_z`.
+
+        Both actions trigger a repaint by calling `self.update()`.
+        """
         degrees = event.angleDelta().y() / 8
         steps = degrees / 15  # Usually, one step is equal to a 15-degree angle.
-        
-        # Set the scale factor and limit the zoom in/out.
-        self.scale *= (1 + steps * 0.1)  # Change the 0.1 to adjust the zoom speed.
-        self.scale = max(0.001, min(1000.0, self.scale))
-        
-        self.update()  # Trigger a repaint.
+
+        if event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier:
+            # Adjust the FOV for zooming
+            self.fov += steps * -1.0  # Adjust zoom speed if necessary
+            self.fov = max(10, min(120, self.fov))  # Constrain the FOV to reasonable limits
+        else:
+            # Adjust the Z translation based on the steps. Change the value 10 to adjust translation speed.
+            self.translation_z += steps * 10
+            self.translation_z = max(-1000, min(1000, self.translation_z))
+
+        self.update()  # Trigger a repaint
 
     def mousePressEvent(self, event):
         self.last_mouse_position = event.pos()
@@ -260,8 +291,8 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
                 self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
             elif self.middle_mouse_pressed:
                 # Adjust translation based on mouse movement
-                self.translation_x += dx * 0.01  # Adjust these factors as needed
-                self.translation_y -= dy * 0.01  # Invert dy for intuitive direction
+                self.translation_x += dx * 0.5  # Adjust these factors as needed
+                self.translation_y -= dy * 0.5  # Invert dy for intuitive direction
 
             self.update()
 

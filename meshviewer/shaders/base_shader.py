@@ -2,10 +2,16 @@ from typing import Any
 from OpenGL import GL
 
 class BaseShader:
-    def __init__(self, vertex_shader_file: str, fragment_shader_file: str) -> None:
-        self.vertex_shader_source = self.load_shader_from_file(vertex_shader_file)
-        self.fragment_shader_source = self.load_shader_from_file(fragment_shader_file)
-        self.program: GL.GLuint = None
+    def __init__(self, vertex_shader_file: str, fragment_shader_file: str, is_from_file: bool = True) -> None:
+        
+        if is_from_file:
+            self.vertex_shader_source = self.load_shader_from_file(vertex_shader_file)
+            self.fragment_shader_source = self.load_shader_from_file(fragment_shader_file)
+        else:
+            self.vertex_shader_source = vertex_shader_file
+            self.fragment_shader_source = fragment_shader_file
+
+        self.create_shader_program()
 
     @staticmethod
     def load_shader_from_file(file_path: str) -> str:
