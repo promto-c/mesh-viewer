@@ -1,5 +1,6 @@
 
 import sys
+import enum
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 
@@ -38,25 +39,32 @@ from OpenGL import GL
 from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianShader
 from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
+class RenderMode(enum.Enum):
+    WIREFRAME = enum.auto()
+    FACE = enum.auto()
+    POINT = enum.auto()
+
 class ObjectViewer(QtWidgets.QOpenGLWidget):
 
-    RENDER_MODES = [
-        'wireframe',
-        'face',
-        'point',
-    ]
+    RENDER_MODE_TO_GL_POLYGON = {
+        RenderMode.WIREFRAME: GL.GL_LINE,
+        RenderMode.FACE: GL.GL_FILL,
+        RenderMode.POINT: GL.GL_POINT,
+    }
 
-    def __init__(self, parent=None, mode=RENDER_MODES[0]):
+    DEFAULT_BACKGROUND_COLOR = (0.2, 0.3, 0.3, 1.0)
+
+    def __init__(self, parent=None, mode=RenderMode.WIREFRAME):
         super().__init__(parent)
         self.meshSet = MeshSet()  # Initialize an empty MeshSet
-        # self.scale = 1.0
+        self.scale = 1.0
         self.last_mouse_position = None
         self.rotation_angle_x = 0.0
         self.rotation_angle_y = 0.0
         self.rotation_angle_z = 0.0
         self.translation_x = 0.0
         self.translation_y = 0.0
-        self.translation_z = 0.0
+        self.translation_z = -5.0
 
         self.fov = 45.0
 
@@ -169,7 +177,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         max_dimension = max(dimensions)
 
         # Set initial scale to fit the object within the view nicely
-        # self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
+        self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
 
         # # Set initial rotation angles for a good view
         # self.rotation_angle_x = 100.0  # Slight tilt
@@ -181,58 +189,72 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         # self.translation_y = -center[1]
         # self.translation_z = -center[2]
 
-    def paintGL(self):
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
-        GL.glClearColor(0.2, 0.3, 0.3, 1.0)
-
-        # Set view, projection, and model matrices via PhongShader
-        view = QtGui.QMatrix4x4()
-        projection = QtGui.QMatrix4x4()
-        projection.perspective(self.fov, self.width() / self.height(), self.near_clip, self.far_clip)
-        # view.translate(0, 0, -10)  # Adjust as needed
-
-        model = QtGui.QMatrix4x4()
-        model.translate(self.translation_x, self.translation_y, self.translation_z)
-        model.rotate(self.rotation_angle_x, 1, 0, 0)
-        model.rotate(self.rotation_angle_y, 0, 1, 0)
-        model.rotate(self.rotation_angle_z, 0, 0, 1)
-
-        # Activate the shader program
-        self.shader.use()
-
+    def set_vertex_shader_uniform(self, view, projection, model):
         # Set matrix uniforms
         self.shader.set_uniform("model", model.data())
         self.shader.set_uniform("view", view.data())
         self.shader.set_uniform("projection", projection.data())
 
+    def set_fragment_shader_uniform(self):
         # Set light and view positions
         self.shader.set_uniform("lightPos", (1.2, 1.0, 2.0))
         self.shader.set_uniform("viewPos", (0.0, 0.0, 0.0))
-
         # Set light and object colors
-        self.shader.set_uniform("lightColor", (1.0, 1.0, 1.0))  # White light
-        self.shader.set_uniform("objectColor", (1.0, 0.5, 0.31))  # Some orange color
+        self.shader.set_uniform("lightColor", (1.0, 1.0, 1.0))
+        self.shader.set_uniform("objectColor", (1.0, 0.5, 0.31))
+        # Set material properties
+        self.shader.set_uniform("ambientStrength", 0.1)
+        self.shader.set_uniform("specularStrength", 0.5)
+        self.shader.set_uniform("shininess", 32.0)
 
-        self.shader.set_uniform("ambientStrength", 0.1)  # Some orange color
-        self.shader.set_uniform("specularStrength", 0.5)  # Some orange color
-        self.shader.set_uniform("shininess", 32.0)  # Some orange color
+    def setup_matrices(self):
+        view = QtGui.QMatrix4x4()
+
+        projection = QtGui.QMatrix4x4()
+        projection.perspective(self.fov, self.width() / self.height(), self.near_clip, self.far_clip)
+
+        model = QtGui.QMatrix4x4()
+        model.translate(self.translation_x, self.translation_y, self.translation_z)
+        model.rotate(self.rotation_angle_y, 0, 1, 0)
+        model.rotate(self.rotation_angle_x, 1, 0, 0)
+        model.rotate(self.rotation_angle_z, 0, 0, 1)
+        model.scale(self.scale)
+
+        self.set_vertex_shader_uniform(view, projection, model)
+    
+    def render_meshes(self):
+        # Default to GL_LINE if mode not found, though all modes should be covered
+        gl_mode = self.RENDER_MODE_TO_GL_POLYGON.get(self.mode, GL.GL_LINE)
 
         for i, vao in enumerate(self.vaos):
             GL.glBindVertexArray(vao)
-            if self.mode == "wireframe":
-                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_LINE)
-            elif self.mode == "face":
-                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_FILL)
-            elif self.mode == "point":
-                GL.glPolygonMode(GL.GL_FRONT_AND_BACK, GL.GL_POINT)
+            GL.glPolygonMode(GL.GL_FRONT_AND_BACK, gl_mode)
 
             mesh = self.meshSet[i]
-            if self.mode == "point":
+            if self.mode == RenderMode.POINT:
                 GL.glDrawArrays(GL.GL_POINTS, 0, mesh.vertex_number())
             else:
                 GL.glDrawElements(GL.GL_TRIANGLES, mesh.face_number() * 3, GL.GL_UNSIGNED_INT, None)
 
         GL.glBindVertexArray(0)
+
+    def clear_screen(self):
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        GL.glClearColor(*self.DEFAULT_BACKGROUND_COLOR)
+
+    def paintGL(self):
+        self.clear_screen()
+
+        # Activate the shader program
+        self.shader.use()
+
+        # Set matrix uniforms
+        self.setup_matrices()
+        # Set light and material properties
+        self.set_fragment_shader_uniform()
+
+        self.render_meshes()
+
         GL.glUseProgram(0)
 
     def resizeGL(self, width, height):
@@ -266,9 +288,13 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             self.fov += steps * -1.0  # Adjust zoom speed if necessary
             self.fov = max(10, min(120, self.fov))  # Constrain the FOV to reasonable limits
         else:
-            # Adjust the Z translation based on the steps. Change the value 10 to adjust translation speed.
-            self.translation_z += steps * 10
-            self.translation_z = max(-1000, min(1000, self.translation_z))
+            # # Adjust the Z translation based on the steps. Change the value 10 to adjust translation speed.
+            # self.translation_z += steps * 10
+            # self.translation_z = max(-1000, min(1000, self.translation_z))
+
+            # Set the scale factor and limit the zoom in/out.
+            self.scale *= (1 + steps * 0.1)  # Change the 0.1 to adjust the zoom speed.
+            self.scale = max(0.001, min(1000.0, self.scale))
 
         self.update()  # Trigger a repaint
 
@@ -291,8 +317,8 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
                 self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
             elif self.middle_mouse_pressed:
                 # Adjust translation based on mouse movement
-                self.translation_x += dx * 0.5  # Adjust these factors as needed
-                self.translation_y -= dy * 0.5  # Invert dy for intuitive direction
+                self.translation_x += dx * 0.01  # Adjust these factors as needed
+                self.translation_y -= dy * 0.01  # Invert dy for intuitive direction
 
             self.update()
 
