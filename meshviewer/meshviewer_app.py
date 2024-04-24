@@ -91,7 +91,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
         # NOTE: WIP
         # Set initial view transformation parameters based on the bounding box
-        self.init_view_transformation()
+        # self.init_view_transformation()
 
     def set_mode(self, mode='wireframe'):
         self.mode = mode
@@ -125,31 +125,31 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
             # Vertices
             vertices = np.array(mesh.vertex_matrix(), dtype='float32')
-            vertexBuffer = GL.glGenBuffers(1)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vertexBuffer)
+            vertex_buffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, vertex_buffer)
             GL.glBufferData(GL.GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL.GL_STATIC_DRAW)
             GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
             GL.glEnableVertexAttribArray(0)
 
             # Normals
             normals = np.array(mesh.vertex_normal_matrix(), dtype='float32')
-            normalBuffer = GL.glGenBuffers(1)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, normalBuffer)
+            normal_buffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, normal_buffer)
             GL.glBufferData(GL.GL_ARRAY_BUFFER, normals.nbytes, normals, GL.GL_STATIC_DRAW)
             GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
             GL.glEnableVertexAttribArray(1)
 
             # Faces
             faces = np.array(mesh.face_matrix().flatten(), dtype='uint32')
-            indexBuffer = GL.glGenBuffers(1)
-            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, indexBuffer)
+            index_buffer = GL.glGenBuffers(1)
+            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, index_buffer)
             GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, faces.nbytes, faces, GL.GL_STATIC_DRAW)
 
             # Store VAO and buffers
             self.vaos.append(vao)
-            self.vertex_buffers.append(vertexBuffer)
-            self.normal_buffers.append(normalBuffer)
-            self.index_buffers.append(indexBuffer)
+            self.vertex_buffers.append(vertex_buffer)
+            self.normal_buffers.append(normal_buffer)
+            self.index_buffers.append(index_buffer)
 
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             GL.glBindVertexArray(0)
@@ -255,7 +255,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
         self.render_meshes()
 
-        GL.glUseProgram(0)
+        self.shader.release()
 
     def resizeGL(self, width, height):
         GL.glViewport(0, 0, width, max(1, height))
