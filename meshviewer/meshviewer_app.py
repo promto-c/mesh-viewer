@@ -54,9 +54,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
     DEFAULT_BACKGROUND_COLOR = (0.2, 0.3, 0.3, 1.0)
 
-    def __init__(self, parent=None, mode=RenderMode.WIREFRAME):
+    def __init__(self, parent=None, mode: RenderMode = RenderMode.WIREFRAME):
         super().__init__(parent)
-        self.meshSet = MeshSet()  # Initialize an empty MeshSet
+        self.mesh_set = MeshSet()  # Initialize an empty MeshSet
         self.scale = 1.0
         self.last_mouse_position = None
         self.rotation_angle_x = 0.0
@@ -68,12 +68,12 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
         self.fov = 45.0
 
-        self.middle_mouse_pressed = False
+        self._middle_mouse_pressed = False
         self.mode = mode  # Default mode. Other values can be "wireframe" or "point"
         self.vaos = []  # List to store Vertex Array Objects for each mesh
-        self.vertexBuffers = []  # List to store Vertex Buffer Objects for vertices
-        self.normalBuffers = []  # List to store Normal Buffer Objects
-        self.indexBuffers = []  # List to store Element Buffer Objects for faces
+        self.vertex_buffers = []  # List to store Vertex Buffer Objects for vertices
+        self.normal_buffers = []  # List to store Normal Buffer Objects
+        self.index_buffers = []  # List to store Element Buffer Objects for faces
         self.shader = None  # Placeholder for the PhongShader instance
 
         # Initialize bounding box corners
@@ -111,7 +111,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             self._addSingleMesh(mesh_input)
 
     def _addSingleMesh(self, mesh):
-        self.meshSet.add_mesh(mesh)
+        self.mesh_set.add_mesh(mesh)
         self.update()
 
     def initBuffers(self):
@@ -119,7 +119,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         overall_min_point = np.array([np.inf, np.inf, np.inf])
         overall_max_point = np.array([-np.inf, -np.inf, -np.inf])
 
-        for mesh in self.meshSet:
+        for mesh in self.mesh_set:
             vao = GL.glGenVertexArrays(1)
             GL.glBindVertexArray(vao)
 
@@ -147,9 +147,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
             # Store VAO and buffers
             self.vaos.append(vao)
-            self.vertexBuffers.append(vertexBuffer)
-            self.normalBuffers.append(normalBuffer)
-            self.indexBuffers.append(indexBuffer)
+            self.vertex_buffers.append(vertexBuffer)
+            self.normal_buffers.append(normalBuffer)
+            self.index_buffers.append(indexBuffer)
 
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             GL.glBindVertexArray(0)
@@ -230,7 +230,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glBindVertexArray(vao)
             GL.glPolygonMode(GL.GL_FRONT_AND_BACK, gl_mode)
 
-            mesh = self.meshSet[i]
+            mesh = self.mesh_set[i]
             if self.mode == RenderMode.POINT:
                 GL.glDrawArrays(GL.GL_POINTS, 0, mesh.vertex_number())
             else:
@@ -301,11 +301,11 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     def mousePressEvent(self, event):
         self.last_mouse_position = event.pos()
         if event.button() == QtCore.Qt.MouseButton.MiddleButton:  # Check if the middle button is pressed
-            self.middle_mouse_pressed = True
+            self._middle_mouse_pressed = True
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.MouseButton.MiddleButton:
-            self.middle_mouse_pressed = False
+            self._middle_mouse_pressed = False
 
     def mouseMoveEvent(self, event):
         if self.last_mouse_position:
@@ -315,7 +315,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             if event.buttons() == QtCore.Qt.MouseButton.LeftButton:
                 self.rotation_angle_x += dy * 0.5  # Adjust the factor for rotation speed
                 self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
-            elif self.middle_mouse_pressed:
+            elif self._middle_mouse_pressed:
                 # Adjust translation based on mouse movement
                 self.translation_x += dx * 0.01  # Adjust these factors as needed
                 self.translation_y -= dy * 0.01  # Invert dy for intuitive direction
