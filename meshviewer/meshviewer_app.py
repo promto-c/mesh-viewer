@@ -3,6 +3,7 @@ import sys
 import enum
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
+from OpenGL import GL
 
 try:
     from pymeshlab import MeshSet, Mesh
@@ -35,7 +36,6 @@ except:
     class Mesh:
         ...
 
-from OpenGL import GL
 from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianShader
 from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
@@ -357,7 +357,7 @@ if __name__ == '__main__':
 
     app = QtWidgets.QApplication(sys.argv)
 
-    mainWindow = MainWindow('mesh_data.npz')
-    # mainWindow = MainWindow('meshviewer\example_models\Room.obj')
+    # mainWindow = MainWindow('mesh_data.npz')
+    mainWindow = MainWindow('example_models/cat.glb')
     mainWindow.show()
     sys.exit(app.exec_())
