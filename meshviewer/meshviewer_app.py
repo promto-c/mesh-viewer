@@ -1,4 +1,3 @@
-
 import sys
 import enum
 import numpy as np
@@ -326,7 +325,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, file_path: str):
-        super(MainWindow, self).__init__()
+        super().__init__()
         self.central_widget = QtWidgets.QWidget()
         self.setCentralWidget(self.central_widget)
         self.layout = QtWidgets.QVBoxLayout(self.central_widget)
