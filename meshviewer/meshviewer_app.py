@@ -220,7 +220,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         model.scale(self.scale)
 
         self.set_vertex_shader_uniform(view, projection, model)
-    
+
     def render_meshes(self):
         # Default to GL_LINE if mode not found, though all modes should be covered
         gl_mode = self.RENDER_MODE_TO_GL_POLYGON.get(self.mode, GL.GL_LINE)
@@ -314,6 +314,10 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             if event.buttons() == QtCore.Qt.MouseButton.LeftButton:
                 self.rotation_angle_x += dy * 0.5  # Adjust the factor for rotation speed
                 self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
+
+                # Add limits to rotation_angle_x to prevent flipping over
+                self.rotation_angle_x = max(min(self.rotation_angle_x, 90), -90)
+
             elif self._middle_mouse_pressed:
                 # Adjust translation based on mouse movement
                 self.translation_x += dx * 0.01  # Adjust these factors as needed
