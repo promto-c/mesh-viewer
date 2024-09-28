@@ -53,6 +53,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
     DEFAULT_BACKGROUND_COLOR = (0.2, 0.3, 0.3, 1.0)
 
+    ROTATION_FACTOR = 0.5
+    TRANSLATION_FACTOR = 0.01
+
     def __init__(self, parent=None, mode: RenderMode = RenderMode.WIREFRAME):
         super().__init__(parent)
         self.mesh_set = MeshSet()  # Initialize an empty MeshSet
@@ -63,7 +66,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.rotation_angle_z = 0.0
         self.translation_x = 0.0
         self.translation_y = 0.0
-        self.translation_z = -5.0
+        self.translation_z = 0.0
 
         self.fov = 45.0
 
@@ -87,10 +90,6 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader = PhongShader()  # Initialize PhongShader
         self.shader.create_shader_program()  # Compile and link shaders
         self.initBuffers()
-
-        # NOTE: WIP
-        # Set initial view transformation parameters based on the bounding box
-        # self.init_view_transformation()
 
     def set_mode(self, mode='wireframe'):
         self.mode = mode
@@ -166,28 +165,6 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.min_point = tuple(overall_min_point.tolist())
         self.max_point = tuple(overall_max_point.tolist())
 
-    # NOTE: WIP
-    def init_view_transformation(self):
-        # Calculate the center of the bounding box
-        # center = tuple((self.min_point[i] + self.max_point[i]) / 2 for i in range(3))
-
-        # Calculate the dimensions of the bounding box
-        dimensions = tuple(self.max_point[i] - self.min_point[i] for i in range(3))
-        max_dimension = max(dimensions)
-
-        # Set initial scale to fit the object within the view nicely
-        self.scale = 5.0 / max_dimension  # Adjust the denominator to control the initial zoom level
-
-        # # Set initial rotation angles for a good view
-        # self.rotation_angle_x = 100.0  # Slight tilt
-        # self.rotation_angle_y = -180.0  # Diagonal view
-        # self.rotation_angle_z = 120.0  # Diagonal view
-
-        # Set initial translation to center the object in the view
-        # self.translation_x = -center[0]
-        # self.translation_y = -center[1]
-        # self.translation_z = -center[2]
-
     def set_vertex_shader_uniform(self, view, projection, model):
         # Set matrix uniforms
         self.shader.set_uniform("model", model.data())
@@ -207,15 +184,16 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader.set_uniform("shininess", 32.0)
 
     def setup_matrices(self):
-        view = QtGui.QMatrix4x4()
-
         projection = QtGui.QMatrix4x4()
         projection.perspective(self.fov, self.width() / self.height(), self.near_clip, self.far_clip)
 
+        view = QtGui.QMatrix4x4()
+        view.translate(0, 0, -5.0)
+
         model = QtGui.QMatrix4x4()
         model.translate(self.translation_x, self.translation_y, self.translation_z)
-        model.rotate(self.rotation_angle_y, 0, 1, 0)
         model.rotate(self.rotation_angle_x, 1, 0, 0)
+        model.rotate(self.rotation_angle_y, 0, 1, 0)
         model.rotate(self.rotation_angle_z, 0, 0, 1)
         model.scale(self.scale)
 
@@ -295,37 +273,30 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             self.scale *= (1 + steps * 0.1)  # Change the 0.1 to adjust the zoom speed.
             self.scale = max(0.001, min(1000.0, self.scale))
 
-        self.update()  # Trigger a repaint
+        self.update()
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QtGui.QMouseEvent):
         self.last_mouse_position = event.pos()
-        if event.button() == QtCore.Qt.MouseButton.MiddleButton:  # Check if the middle button is pressed
-            self._middle_mouse_pressed = True
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.MouseButton.MiddleButton:
-            self._middle_mouse_pressed = False
-
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         if self.last_mouse_position:
             dx = event.x() - self.last_mouse_position.x()
             dy = event.y() - self.last_mouse_position.y()
 
-            if event.buttons() == QtCore.Qt.MouseButton.LeftButton:
-                self.rotation_angle_x += dy * 0.5  # Adjust the factor for rotation speed
-                self.rotation_angle_y += dx * 0.5  # Adjust the factor for rotation speed
+            if event.buttons() & QtCore.Qt.MouseButton.LeftButton:
+                self.rotation_angle_x += dy * self.ROTATION_FACTOR
+                self.rotation_angle_y += dx * self.ROTATION_FACTOR
 
                 # Add limits to rotation_angle_x to prevent flipping over
                 self.rotation_angle_x = max(min(self.rotation_angle_x, 90), -90)
 
-            elif self._middle_mouse_pressed:
-                # Adjust translation based on mouse movement
-                self.translation_x += dx * 0.01  # Adjust these factors as needed
-                self.translation_y -= dy * 0.01  # Invert dy for intuitive direction
+            if event.buttons() & QtCore.Qt.MouseButton.MiddleButton:
+                # Adjust translation base d on mouse movement
+                self.translation_x += dx * self.TRANSLATION_FACTOR
+                self.translation_y -= dy * self.TRANSLATION_FACTOR
 
             self.update()
-
-        self.last_mouse_position = event.pos()
+            self.last_mouse_position = event.pos()
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, file_path: str):

@@ -3,11 +3,6 @@ import enum
 import numpy as np
 import pymeshlab
 from PyQt5 import QtWidgets, QtGui, QtCore
-from PyQt5.QtWidgets import QOpenGLWidget
-from PyQt5.QtGui import (
-    QOpenGLShaderProgram, QOpenGLBuffer, QOpenGLVertexArrayObject,
-    QOpenGLShader, QMatrix4x4, QVector3D, QSurfaceFormat
-)
 from OpenGL import GL
 
 class RenderMode(enum.Enum):
@@ -16,7 +11,7 @@ class RenderMode(enum.Enum):
     HIDDEN_LINE = enum.auto()
     POINT = enum.auto()
 
-class GLWidget(QOpenGLWidget):
+class GLWidget(QtWidgets.QOpenGLWidget):
     RENDER_MODE_TO_GL_POLYGON = {
         RenderMode.WIREFRAME: GL.GL_LINE,
         RenderMode.FACE: GL.GL_FILL,
@@ -29,7 +24,7 @@ class GLWidget(QOpenGLWidget):
         self.rotation_y = 0.0
         self.last_pos = None
         self.zoom_level = 1.0  # Initial zoom level
-        self.translation = QVector3D(0.0, 0.0, 0.0)
+        self.translation = QtGui.QVector3D(0.0, 0.0, 0.0)
         self.render_mode = RenderMode.FACE  # Default render mode
         self.middle_button_pressed = False
 
@@ -42,7 +37,7 @@ class GLWidget(QOpenGLWidget):
         self.model_loaded = False
 
         # Enable multi-sampling for anti-aliasing
-        fmt = QSurfaceFormat()
+        fmt = QtGui.QSurfaceFormat()
         fmt.setSamples(4)
         self.setFormat(fmt)
 
@@ -54,22 +49,22 @@ class GLWidget(QOpenGLWidget):
         GL.glEnable(GL.GL_MULTISAMPLE)
 
         # Compile shaders for axes and grid
-        self.program = QOpenGLShaderProgram()
-        self.program.addShaderFromSourceCode(QOpenGLShader.Vertex, vertex_shader_source)
-        self.program.addShaderFromSourceCode(QOpenGLShader.Fragment, fragment_shader_source)
+        self.program = QtGui.QOpenGLShaderProgram()
+        self.program.addShaderFromSourceCode(QtGui.QOpenGLShader.Vertex, vertex_shader_source)
+        self.program.addShaderFromSourceCode(QtGui.QOpenGLShader.Fragment, fragment_shader_source)
         self.program.link()
 
         # Compile shaders for model rendering
-        self.program_model = QOpenGLShaderProgram()
-        self.program_model.addShaderFromSourceCode(QOpenGLShader.Vertex, model_vertex_shader_source)
-        self.program_model.addShaderFromSourceCode(QOpenGLShader.Fragment, model_fragment_shader_source)
+        self.program_model = QtGui.QOpenGLShaderProgram()
+        self.program_model.addShaderFromSourceCode(QtGui.QOpenGLShader.Vertex, model_vertex_shader_source)
+        self.program_model.addShaderFromSourceCode(QtGui.QOpenGLShader.Fragment, model_fragment_shader_source)
         self.program_model.link()
 
         # Set up vertex data and buffers for axes and grid
         self.setup_axes_and_grid()
 
         # Load a model (replace with the path to your model file)
-        self.load_model('example_models/cat.glb')
+        self.load_model('example_models/cat_cartoon.glb')
 
     def load_model(self, file_path):
         # Load the mesh using PyMeshLab
@@ -87,27 +82,27 @@ class GLWidget(QOpenGLWidget):
         normals = np.array(mesh.vertex_normal_matrix(), dtype=np.float32)
 
         # Create VBOs for vertices and normals
-        self.model_vbo_vertices = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
+        self.model_vbo_vertices = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
         self.model_vbo_vertices.create()
         self.model_vbo_vertices.bind()
         self.model_vbo_vertices.allocate(vertices.tobytes(), vertices.nbytes)
         self.model_vbo_vertices.release()
 
-        self.model_vbo_normals = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
+        self.model_vbo_normals = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
         self.model_vbo_normals.create()
         self.model_vbo_normals.bind()
         self.model_vbo_normals.allocate(normals.tobytes(), normals.nbytes)
         self.model_vbo_normals.release()
 
         # Create EBO for indices
-        self.model_ebo = QOpenGLBuffer(QOpenGLBuffer.IndexBuffer)
+        self.model_ebo = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.IndexBuffer)
         self.model_ebo.create()
         self.model_ebo.bind()
         self.model_ebo.allocate(indices.tobytes(), indices.nbytes)
         self.model_ebo.release()
 
         # Create VAO for the model
-        self.model_vao = QOpenGLVertexArrayObject()
+        self.model_vao = QtGui.QOpenGLVertexArrayObject()
         self.model_vao.create()
         self.model_vao.bind()
 
@@ -155,7 +150,7 @@ class GLWidget(QOpenGLWidget):
         self.program.setAttributeBuffer(0, GL.GL_FLOAT, 0, 3, 0)
 
         # Draw axes
-        colors = [QVector3D(0.8, 0.4, 0.4), QVector3D(0.4, 0.8, 0), QVector3D(0.2, 0.4, 1)]
+        colors = [QtGui.QVector3D(0.8, 0.4, 0.4), QtGui.QVector3D(0.4, 0.8, 0), QtGui.QVector3D(0.2, 0.4, 0.8)]
         axis_segments = [2, 2, 2]  # Each axis has 2 vertices (start and end)
         offset = 0
         for i in range(3):
@@ -166,7 +161,7 @@ class GLWidget(QOpenGLWidget):
         # Draw grid
         grid_start = offset
         grid_count = len(self.grid_vertices) // 3
-        self.program.setUniformValue('color', QVector3D(0.4, 0.4, 0.4))
+        self.program.setUniformValue('color', QtGui.QVector3D(0.4, 0.4, 0.4))
         GL.glDrawArrays(GL.GL_LINES, grid_start, grid_count)
 
         self.vbo.release()
@@ -184,10 +179,10 @@ class GLWidget(QOpenGLWidget):
             self.program_model.setUniformValue('mvp_matrix', mvp_matrix)
             self.program_model.setUniformValue('model_matrix', model_matrix)
             self.program_model.setUniformValue('normal_matrix', normal_matrix)
-            self.program_model.setUniformValue('light_position', QVector3D(10.0, 10.0, 10.0))
+            self.program_model.setUniformValue('light_position', QtGui.QVector3D(10.0, 10.0, 10.0))
             self.program_model.setUniformValue('view_position', camera_position)
-            self.program_model.setUniformValue('light_color', QVector3D(1.0, 1.0, 1.0))
-            self.program_model.setUniformValue('object_color', QVector3D(0.8, 0.5, 0.3))  # Adjust as needed
+            self.program_model.setUniformValue('light_color', QtGui.QVector3D(1.0, 1.0, 1.0))
+            self.program_model.setUniformValue('object_color', QtGui.QVector3D(0.8, 0.5, 0.3))  # Adjust as needed
 
             self.model_vao.bind()
 
@@ -239,11 +234,11 @@ class GLWidget(QOpenGLWidget):
         self.vertices = np.concatenate((axes_vertices, self.grid_vertices))
 
         # Create Vertex Buffer Object (VBO)
-        self.vbo = QOpenGLBuffer(QOpenGLBuffer.VertexBuffer)
+        self.vbo = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.Type.VertexBuffer)
         self.vbo.create()
 
         # Create Vertex Array Object (VAO)
-        self.vao = QOpenGLVertexArrayObject()
+        self.vao = QtGui.QOpenGLVertexArrayObject()
         self.vao.create()
 
         self.update_vertex_buffer()
@@ -289,16 +284,16 @@ class GLWidget(QOpenGLWidget):
         self.vbo.release()
 
     def get_mvp_matrix(self):
-        mvp = QMatrix4x4()
+        mvp = QtGui.QMatrix4x4()
         aspect_ratio = self.width() / self.height() if self.height() != 0 else 1.0
         mvp.perspective(45.0, aspect_ratio, 0.1, 10000.0)
-        mvp.lookAt(self.get_camera_position(), QVector3D(0, 0, 0), QVector3D(0, 1, 0))
+        mvp.lookAt(self.get_camera_position(), QtGui.QVector3D(0, 0, 0), QtGui.QVector3D(0, 1, 0))
         mvp.rotate(self.rotation_x, 1, 0, 0)
         mvp.rotate(self.rotation_y, 0, 1, 0)
         return mvp
 
     def get_model_matrix(self):
-        model = QMatrix4x4()
+        model = QtGui.QMatrix4x4()
         model.setToIdentity()
         model.translate(self.translation)
         return model
@@ -307,18 +302,12 @@ class GLWidget(QOpenGLWidget):
         # Position the camera based on zoom level
         base_distance = 10.0  # Base distance from the origin
         distance = base_distance / self.zoom_level  # Adjust distance based on zoom level
-        return QVector3D(distance, distance, distance)
+        return QtGui.QVector3D(distance, distance, distance)
 
-    def mousePressEvent(self, event):
+    def mousePressEvent(self, event: QtGui.QMouseEvent):
         self.last_pos = event.pos()
-        if event.button() == QtCore.Qt.MiddleButton:
-            self.middle_button_pressed = True
 
-    def mouseReleaseEvent(self, event):
-        if event.button() == QtCore.Qt.MiddleButton:
-            self.middle_button_pressed = False
-
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent):
         if self.last_pos is None:
             self.last_pos = event.pos()
             return
@@ -326,11 +315,11 @@ class GLWidget(QOpenGLWidget):
         dx = event.x() - self.last_pos.x()
         dy = event.y() - self.last_pos.y()
 
-        if event.buttons() == QtCore.Qt.LeftButton:
+        if event.buttons() & QtCore.Qt.MouseButton.LeftButton:
             # Rotate
             self.rotation_x += dy * 0.5  # Sensitivity factor
             self.rotation_y += dx * 0.5
-        elif self.middle_button_pressed:
+        if event.buttons() & QtCore.Qt.MouseButton.MiddleButton:
             # Translate
             self.translation.setX(self.translation.x() + dx * 0.01)  # Adjust factors as needed
             self.translation.setY(self.translation.y() - dy * 0.01)
