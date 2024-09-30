@@ -16,12 +16,8 @@ class Drawable:
         """Initialize OpenGL buffers and other resources."""
         raise NotImplementedError
 
-    def render(self, shader_program, mvp_matrix, model_matrix, camera_position):
+    def render(self):
         """Render the object using the given shader program and transformation matrices."""
-        raise NotImplementedError
-
-    def cleanup(self):
-        """Clean up OpenGL resources."""
         raise NotImplementedError
 
 class Axes(Drawable):
@@ -49,11 +45,11 @@ class Axes(Drawable):
             0.8, 0.4, 0.4,
             0.8, 0.4, 0.4,
             # Y axis color (Green)
-            0.4, 0.8, 0.0,
-            0.4, 0.8, 0.0,
+            0.4, 0.7, 0.0,
+            0.4, 0.7, 0.0,
             # Z axis color (Blue)
-            0.2, 0.4, 0.8,
-            0.2, 0.4, 0.8,
+            0.2, 0.4, 0.7,
+            0.2, 0.4, 0.7,
         ], dtype=np.float32)
 
         self.vao = None
@@ -73,56 +69,29 @@ class Axes(Drawable):
         self.vbo_vertices = GL.glGenBuffers(1)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_STATIC_DRAW)
+        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+        GL.glEnableVertexAttribArray(0)  # Location 1: color
 
         # Generate and bind VBO for vertex colors
         self.vbo_colors = GL.glGenBuffers(1)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, self.colors.nbytes, self.colors, GL.GL_STATIC_DRAW)
+        GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+        GL.glEnableVertexAttribArray(1)  # Location 1: color
 
         # Unbind VAO and VBOs
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         GL.glBindVertexArray(0)
 
-
-    def render(self, shader_program, mvp_matrix, model_matrix, camera_position):
+    def render(self):
         """Render the axes using the provided shader program and transformation matrices.
-
-        Args:
-            shader_program (QtGui.QOpenGLShaderProgram): The shader program to use for rendering.
-            mvp_matrix (QtGui.QMatrix4x4): The Model-View-Projection matrix.
-            model_matrix (QtGui.QMatrix4x4): The Model matrix.
-            camera_position (QtGui.QVector3D): The position of the camera in world space.
         """
-        # Bind the shader program and set uniform variables
-        shader_program.bind()
-        shader_program.setUniformValue('mvp_matrix', mvp_matrix)
-        shader_program.setUniformValue('model_matrix', model_matrix)
-        shader_program.setUniformValue('camera_position', camera_position)
-
         # Bind the VAO containing the axes' VBOs
         GL.glBindVertexArray(self.vao)
-
-        # Bind and set the vertex positions
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
-        shader_program.enableAttributeArray(0)  # Location 0: position
-        shader_program.setAttributeBuffer(0, GL.GL_FLOAT, 0, 3)
-        # self.vbo_vertices.release()
-
-        # Bind and set the vertex colors
-        # self.vbo_colors.bind()
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
-        shader_program.enableAttributeArray(1)  # Location 1: color
-        shader_program.setAttributeBuffer(1, GL.GL_FLOAT, 0, 3)
-        # self.vbo_colors.release()
-
         # Draw axes lines
         GL.glDrawArrays(GL.GL_LINES, 0, 6)
-
-        # Release the VAO and shader program
+        # Unbind the VAO
         GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-
-        shader_program.release()
 
 class Grid(Drawable):
     def __init__(self, grid_spacing=1.0, grid_size=50):
@@ -196,7 +165,7 @@ class Grid(Drawable):
         # Unbind the VAO to prevent unintended modifications
         GL.glBindVertexArray(0)
 
-    def render(self, shader_program: QtGui.QOpenGLShaderProgram, mvp_matrix, model_matrix, camera_position):
+    def render(self):
         """Render the grid using the provided shader program and transformation matrices.
 
         Args:
@@ -205,43 +174,12 @@ class Grid(Drawable):
             model_matrix (np.ndarray): The 4x4 Model matrix.
             camera_position (np.ndarray): The position of the camera in world space.
         """
-        # Bind the shader program and set uniform variables
-        if isinstance(shader_program, QtGui.QOpenGLShaderProgram):
-            shader_program = shader_program.programId()
-        # shader_program.programId
-        GL.glUseProgram(shader_program)
-
-        # Set uniform variables (assuming you have the locations for these uniforms)
-        mvp_loc = GL.glGetUniformLocation(shader_program, 'mvp_matrix')
-        model_loc = GL.glGetUniformLocation(shader_program, 'model_matrix')
-        camera_loc = GL.glGetUniformLocation(shader_program, 'camera_position')
-
-        GL.glUniformMatrix4fv(mvp_loc, 1, GL.GL_FALSE, mvp_matrix.data())
-        GL.glUniformMatrix4fv(model_loc, 1, GL.GL_FALSE, model_matrix.data())
-        GL.glUniform3fv(camera_loc, 1, [camera_position.x(), camera_position.y(), camera_position.z()])
-
         # Bind the VAO containing the grid's VBOs
         GL.glBindVertexArray(self.vao)
-
-        # Enable vertex attribute arrays (position and color)
-        GL.glEnableVertexAttribArray(0) # Location 0: position
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-
-        GL.glEnableVertexAttribArray(1) # Location 1: color
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
-        GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-
         # Draw the grid lines
         GL.glDrawArrays(GL.GL_LINES, 0, len(self.vertices) // 3)
-
-        # Disable vertex attribute arrays and unbind the VAO
-        GL.glDisableVertexAttribArray(0)
-        GL.glDisableVertexAttribArray(1)
+        # Unbind the VAO
         GL.glBindVertexArray(0)
-
-        # Unbind the shader program
-        GL.glUseProgram(0)
 
 class GLWidget(QtWidgets.QOpenGLWidget):
     RENDER_MODE_TO_GL_POLYGON = {
@@ -380,16 +318,6 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         self.show_axes = show
         self.update()
 
-    def set_show_grid(self, show: bool):
-        """
-        Set the visibility of the Grid.
-
-        Args:
-            show (bool): True to show Grid, False to hide.
-        """
-        self.show_grid = show
-        self.update()
-
     def resizeGL(self, w, h):
         GL.glViewport(0, 0, w, h)
 
@@ -399,13 +327,18 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         model_matrix = self.get_model_matrix()
         camera_position = self.get_camera_position()
 
+        self.program.bind()
+        self.program.setUniformValue('mvp_matrix', mvp_matrix)
+        self.program.setUniformValue('model_matrix', model_matrix)
+        self.program.setUniformValue('camera_position', camera_position)
+        self.program.release()
+
         # Render axes if enabled
         if self.show_axes:
-            self.axes.render(self.program, mvp_matrix, model_matrix, camera_position)
-
-        # Render grid if enabled
-        if self.show_grid:
-            self.grid.render(self.program, mvp_matrix, model_matrix, camera_position)
+            self.program.bind()
+            self.axes.render()
+            self.grid.render()
+            self.program.release()
 
         # Render the model if loaded
         if self.model_loaded:
@@ -652,25 +585,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.axes_checkbox.stateChanged.connect(self.toggle_axes)
         toolbar.addWidget(self.axes_checkbox)
 
-        # Add toggle for Grid
-        self.grid_checkbox = QtWidgets.QCheckBox("Show Grid")
-        self.grid_checkbox.setChecked(True)
-        self.grid_checkbox.stateChanged.connect(self.toggle_grid)
-        toolbar.addWidget(self.grid_checkbox)
-
     def toggle_axes(self, state):
         """
         Toggle the visibility of Axes based on checkbox state.
         """
         show = state == QtCore.Qt.Checked
         self.gl_widget.set_show_axes(show)
-
-    def toggle_grid(self, state):
-        """
-        Toggle the visibility of Grid based on checkbox state.
-        """
-        show = state == QtCore.Qt.Checked
-        self.gl_widget.set_show_grid(show)
 
 
 if __name__ == '__main__':
