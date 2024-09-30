@@ -158,7 +158,7 @@ def load_mesh_from_npz(filename):
 
 if __name__ == "__main__":
     # Specify the path to the mesh file
-    mesh_file_path = 'OBJ/Room.obj'
+    mesh_file_path = 'example_models/cat_cartoon.glb'
     mesh_data = load_mesh(mesh_file_path)
 
     # Specify the output file path for the combined mesh data

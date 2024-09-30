@@ -1,27 +1,29 @@
 #version 330 core
+// Input variables from the vertex shader
+in vec3 FragPos;
+in vec3 Normal;
 
+// Uniform variables for lighting and material properties
+uniform vec3 lightPos;
+uniform vec3 lightColor;
+uniform vec3 objectColor;
+uniform float ambientStrength = 0.1;
+uniform float diffuseStrength = 1.0;
+
+// Output variable for the fragment color
 out vec4 FragColor;
 
-in vec3 Normal; // Normal from vertex shader
-in vec3 FragPos; // Fragment position from vertex shader
-
-uniform vec3 lightPos; // Position of the light source
-uniform vec3 lightColor; // Color of the light
-uniform vec3 objectColor; // Color of the object
-
-void main()
-{
-    // Ambient lighting
-    float ambientStrength = 0.1;
+void main() {
+    // 1. Ambient lighting component
     vec3 ambient = ambientStrength * lightColor;
-    
-    // Diffuse lighting
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * lightColor;
-    
-    // Combine the two components
-    vec3 result = (ambient + diffuse) * objectColor;
-    FragColor = vec4(result, 1.0);
+
+    // 2. Diffuse lighting component based on Lambertian reflection
+    vec3 norm = normalize(Normal);                   // Normalize the interpolated normal
+    vec3 lightDir = normalize(lightPos - FragPos);   // Direction vector from the fragment to the light source
+    float diff = max(dot(norm, lightDir), 0.0);      // Compute the diffuse intensity (dot product)
+    vec3 diffuse = diffuseStrength * diff * lightColor; // Scale diffuse component by light color and strength
+
+    // 3. Combine ambient and diffuse components
+    vec3 result = (ambient + diffuse) * objectColor; // Combine lighting components with object color
+    FragColor = vec4(result, 1.0);                   // Output the final color
 }

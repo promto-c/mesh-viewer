@@ -1,15 +1,26 @@
 from typing import Any
 from OpenGL import GL
 
+from pathlib import Path
+SHADERS_ROOT = Path(__file__).parent
+
+
 class BaseShader:
-    def __init__(self, vertex_shader_file: str, fragment_shader_file: str, is_from_file: bool = True) -> None:
-        
+
+    VERTEX_SHADER_FILE = SHADERS_ROOT / "glsl/vertex_shader.glsl"
+    FRAGMENT_SHADER_FILE = None
+
+    def __init__(self, vertex_shader_source: str = None, fragment_shader_source: str = None, is_from_file: bool = True) -> None:
         if is_from_file:
-            self.vertex_shader_source = self.load_shader_from_file(vertex_shader_file)
-            self.fragment_shader_source = self.load_shader_from_file(fragment_shader_file)
+            vertex_shader_source = vertex_shader_source or self.VERTEX_SHADER_FILE
+            fragment_shader_source = fragment_shader_source or self.FRAGMENT_SHADER_FILE
+            self.vertex_shader_source = self.load_shader_from_file(vertex_shader_source)
+            self.fragment_shader_source = self.load_shader_from_file(fragment_shader_source)
         else:
-            self.vertex_shader_source = vertex_shader_file
-            self.fragment_shader_source = fragment_shader_file
+            vertex_shader_source = vertex_shader_source or self.load_shader_from_file(self.VERTEX_SHADER_FILE)
+            fragment_shader_source = fragment_shader_source or self.load_shader_from_file(self.FRAGMENT_SHADER_FILE)
+            self.vertex_shader_source = vertex_shader_source
+            self.fragment_shader_source = fragment_shader_source
 
         self.create_shader_program()
 
