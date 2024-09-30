@@ -78,10 +78,6 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.index_buffers = []  # List to store Element Buffer Objects for faces
         self.shader = None  # Placeholder for the PhongShader instance
 
-        # Initialize bounding box corners
-        self.min_point = (float('inf'), float('inf'), float('inf'))
-        self.max_point = (float('-inf'), float('-inf'), float('-inf'))
-
         self.near_clip = 0.1
         self.far_clip = 1000
 
@@ -95,28 +91,23 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.mode = mode
         self.update()
 
-    def addMesh(self, mesh_input):
-        """
-        Adds a mesh to the viewer. The mesh can be a single Mesh object or a MeshSet.
+    def add_mesh(self, mesh_input):
+        """Adds a mesh to the viewer. The mesh can be a single Mesh object or a MeshSet.
         
         Parameters:
             mesh (Mesh or MeshSet): The mesh or MeshSet to add.
         """
         if isinstance(mesh_input, MeshSet):
             for mesh in mesh_input:
-                self._addSingleMesh(mesh)
+                self._add_single_mesh(mesh)
         else:
-            self._addSingleMesh(mesh_input)
+            self._add_single_mesh(mesh_input)
 
-    def _addSingleMesh(self, mesh):
+    def _add_single_mesh(self, mesh):
         self.mesh_set.add_mesh(mesh)
         self.update()
 
     def initBuffers(self):
-        # Initialize min and max points with opposite infinity values
-        overall_min_point = np.array([np.inf, np.inf, np.inf])
-        overall_max_point = np.array([-np.inf, -np.inf, -np.inf])
-
         for mesh in self.mesh_set:
             vao = GL.glGenVertexArrays(1)
             GL.glBindVertexArray(vao)
@@ -151,19 +142,6 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
 
             GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             GL.glBindVertexArray(0)
-
-            # NOTE: WIP
-            # Get bounding box
-            bbox = mesh.bounding_box()
-            min_point = np.array(bbox.min())
-            max_point = np.array(bbox.max())
-
-            # Update the overall bounding box
-            overall_min_point = np.minimum(overall_min_point, min_point)
-            overall_max_point = np.maximum(overall_max_point, max_point)
-
-        self.min_point = tuple(overall_min_point.tolist())
-        self.max_point = tuple(overall_max_point.tolist())
 
     def set_vertex_shader_uniform(self, view, projection, model):
         # Set matrix uniforms
@@ -309,14 +287,14 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if file_path.endswith('.pkl'):
             mesh_data = load_mesh_from_pickle(file_path)
-            self.object_viewer.addMesh(mesh_data)
+            self.object_viewer.add_mesh(mesh_data)
         elif file_path.endswith('.npz'):
             mesh_data = load_mesh_from_npz(file_path)
-            self.object_viewer.addMesh(mesh_data)
+            self.object_viewer.add_mesh(mesh_data)
         else:
             mesh_set = MeshSet()
             mesh_set.load_new_mesh(file_path)
-            self.object_viewer.addMesh(mesh_set)
+            self.object_viewer.add_mesh(mesh_set)
             
         self.layout.addWidget(self.object_viewer)
         self.setWindowTitle("Simple PyQt OBJ Viewer")

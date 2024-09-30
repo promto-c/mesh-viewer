@@ -26,6 +26,11 @@ class Drawable:
 
 class Axes(Drawable):
     def __init__(self, length=1000.0):
+        """Initialize the Axes object.
+
+        Args:
+            length (float): The length of each axis line.
+        """
         self.length = length
         self.vertices = np.array([
             # X axis (Red)
@@ -55,66 +60,73 @@ class Axes(Drawable):
         self.vbo_vertices = None
         self.vbo_colors = None
 
+        self.initialize()
+
     def initialize(self):
-        # Create VAO
-        self.vao = QtGui.QOpenGLVertexArrayObject()
-        self.vao.create()
-        self.vao.bind()
+        """Initialize OpenGL buffers and configure the Vertex Array Object (VAO).
+        """
+        # Generate and bind VAO
+        self.vao = GL.glGenVertexArrays(1)
+        GL.glBindVertexArray(self.vao)
 
-        # Create VBO for vertices
-        self.vbo_vertices = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
-        self.vbo_vertices.create()
-        self.vbo_vertices.bind()
-        self.vbo_vertices.allocate(self.vertices.tobytes(), self.vertices.nbytes)
-        self.vbo_vertices.setUsagePattern(QtGui.QOpenGLBuffer.StaticDraw)
+        # Generate and bind VBO for vertex positions
+        self.vbo_vertices = GL.glGenBuffers(1)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices, GL.GL_STATIC_DRAW)
 
-        # Create VBO for colors
-        self.vbo_colors = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
-        self.vbo_colors.create()
-        self.vbo_colors.bind()
-        self.vbo_colors.allocate(self.colors.tobytes(), self.colors.nbytes)
-        self.vbo_colors.setUsagePattern(QtGui.QOpenGLBuffer.StaticDraw)
+        # Generate and bind VBO for vertex colors
+        self.vbo_colors = GL.glGenBuffers(1)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, self.colors.nbytes, self.colors, GL.GL_STATIC_DRAW)
 
-        self.vao.release()
+        # Unbind VAO and VBOs
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        GL.glBindVertexArray(0)
+
 
     def render(self, shader_program, mvp_matrix, model_matrix, camera_position):
+        """Render the axes using the provided shader program and transformation matrices.
+
+        Args:
+            shader_program (QtGui.QOpenGLShaderProgram): The shader program to use for rendering.
+            mvp_matrix (QtGui.QMatrix4x4): The Model-View-Projection matrix.
+            model_matrix (QtGui.QMatrix4x4): The Model matrix.
+            camera_position (QtGui.QVector3D): The position of the camera in world space.
+        """
+        # Bind the shader program and set uniform variables
         shader_program.bind()
         shader_program.setUniformValue('mvp_matrix', mvp_matrix)
         shader_program.setUniformValue('model_matrix', model_matrix)
         shader_program.setUniformValue('camera_position', camera_position)
 
-        self.vao.bind()
+        # Bind the VAO containing the axes' VBOs
+        GL.glBindVertexArray(self.vao)
 
-        # Bind vertices
-        self.vbo_vertices.bind()
-        shader_program.enableAttributeArray(0)
+        # Bind and set the vertex positions
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
+        shader_program.enableAttributeArray(0)  # Location 0: position
         shader_program.setAttributeBuffer(0, GL.GL_FLOAT, 0, 3)
-        self.vbo_vertices.release()
+        # self.vbo_vertices.release()
 
-        # Bind colors
-        self.vbo_colors.bind()
-        shader_program.enableAttributeArray(1)
+        # Bind and set the vertex colors
+        # self.vbo_colors.bind()
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
+        shader_program.enableAttributeArray(1)  # Location 1: color
         shader_program.setAttributeBuffer(1, GL.GL_FLOAT, 0, 3)
-        self.vbo_colors.release()
+        # self.vbo_colors.release()
 
         # Draw axes lines
         GL.glDrawArrays(GL.GL_LINES, 0, 6)
 
-        self.vao.release()
-        shader_program.release()
+        # Release the VAO and shader program
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
-    def cleanup(self):
-        if self.vbo_vertices:
-            self.vbo_vertices.destroy()
-        if self.vbo_colors:
-            self.vbo_colors.destroy()
-        if self.vao:
-            self.vao.destroy()
+        shader_program.release()
 
 class Grid(Drawable):
     def __init__(self, grid_spacing=1.0, grid_size=50):
-        """
-        Initialize the Grid object.
+        """Initialize the Grid object.
 
         Args:
             grid_spacing (float): The spacing between grid lines.
@@ -129,9 +141,10 @@ class Grid(Drawable):
         self.vbo_vertices = None
         self.vbo_colors = None
 
+        self.initialize()
+
     def generate_grid_vertices(self):
-        """
-        Generate the vertex data for the grid lines.
+        """Generate the vertex data for the grid lines.
 
         Returns:
             np.ndarray: An array of vertex positions for the grid lines.
@@ -155,80 +168,80 @@ class Grid(Drawable):
         return np.array(grid_lines, dtype=np.float32)
 
     def initialize(self):
-        """
-        Initialize OpenGL buffers and configure the Vertex Array Object (VAO).
+        """Initialize OpenGL buffers and configure the Vertex Array Object (VAO).
         """
         # Create and bind VAO
-        self.vao = QtGui.QOpenGLVertexArrayObject()
-        self.vao.create()
-        self.vao.bind()
+        self.vao = GL.glGenVertexArrays(1)
+        GL.glBindVertexArray(self.vao)
 
         # Create and bind VBO for vertex positions
-        self.vbo_vertices = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
-        self.vbo_vertices.create()
-        self.vbo_vertices.bind()
-        self.vbo_vertices.allocate(self.vertices.tobytes(), self.vertices.nbytes)
-        self.vbo_vertices.setUsagePattern(QtGui.QOpenGLBuffer.StaticDraw)
+        self.vbo_vertices = GL.glGenBuffers(1)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, self.vertices.nbytes, self.vertices.tobytes(), GL.GL_STATIC_DRAW)
 
-        # Create and bind VBO for vertex colors (all lines have the same color)
+        # Enable the position attribute and set the pointer
+        GL.glEnableVertexAttribArray(0)  # Assuming the position attribute is at index 0
+        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+
+        # Create and bind VBO for vertex colors
         colors = np.tile(self.color, (len(self.vertices) // 3, 1)).flatten().astype(np.float32)
-        self.vbo_colors = QtGui.QOpenGLBuffer(QtGui.QOpenGLBuffer.VertexBuffer)
-        self.vbo_colors.create()
-        self.vbo_colors.bind()
-        self.vbo_colors.allocate(colors.tobytes(), colors.nbytes)
-        self.vbo_colors.setUsagePattern(QtGui.QOpenGLBuffer.StaticDraw)
+        self.vbo_colors = GL.glGenBuffers(1)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, colors.nbytes, colors.tobytes(), GL.GL_STATIC_DRAW)
 
-        # Release VAO to prevent unintended modifications
-        self.vao.release()
+        # Enable the color attribute and set the pointer
+        GL.glEnableVertexAttribArray(1)  # Assuming the color attribute is at index 1
+        GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
 
-    def render(self, shader_program, mvp_matrix, model_matrix, camera_position):
-        """
-        Render the grid using the provided shader program and transformation matrices.
+        # Unbind the VAO to prevent unintended modifications
+        GL.glBindVertexArray(0)
+
+    def render(self, shader_program: QtGui.QOpenGLShaderProgram, mvp_matrix, model_matrix, camera_position):
+        """Render the grid using the provided shader program and transformation matrices.
 
         Args:
-            shader_program (QtGui.QOpenGLShaderProgram): The shader program to use for rendering.
-            mvp_matrix (QtGui.QMatrix4x4): The Model-View-Projection matrix.
-            model_matrix (QtGui.QMatrix4x4): The Model matrix.
-            camera_position (QtGui.QVector3D): The position of the camera in world space.
+            shader_program (int): The OpenGL shader program ID to use for rendering.
+            mvp_matrix (np.ndarray): The 4x4 Model-View-Projection matrix.
+            model_matrix (np.ndarray): The 4x4 Model matrix.
+            camera_position (np.ndarray): The position of the camera in world space.
         """
         # Bind the shader program and set uniform variables
-        shader_program.bind()
-        shader_program.setUniformValue('mvp_matrix', mvp_matrix)
-        shader_program.setUniformValue('model_matrix', model_matrix)
-        shader_program.setUniformValue('camera_position', camera_position)
+        if isinstance(shader_program, QtGui.QOpenGLShaderProgram):
+            shader_program = shader_program.programId()
+        # shader_program.programId
+        GL.glUseProgram(shader_program)
+
+        # Set uniform variables (assuming you have the locations for these uniforms)
+        mvp_loc = GL.glGetUniformLocation(shader_program, 'mvp_matrix')
+        model_loc = GL.glGetUniformLocation(shader_program, 'model_matrix')
+        camera_loc = GL.glGetUniformLocation(shader_program, 'camera_position')
+
+        GL.glUniformMatrix4fv(mvp_loc, 1, GL.GL_FALSE, mvp_matrix.data())
+        GL.glUniformMatrix4fv(model_loc, 1, GL.GL_FALSE, model_matrix.data())
+        GL.glUniform3fv(camera_loc, 1, [camera_position.x(), camera_position.y(), camera_position.z()])
 
         # Bind the VAO containing the grid's VBOs
-        self.vao.bind()
+        GL.glBindVertexArray(self.vao)
 
-        # Bind and set the vertex positions
-        self.vbo_vertices.bind()
-        shader_program.enableAttributeArray(0)  # Location 0: position
-        shader_program.setAttributeBuffer(0, GL.GL_FLOAT, 0, 3)
-        self.vbo_vertices.release()
+        # Enable vertex attribute arrays (position and color)
+        GL.glEnableVertexAttribArray(0) # Location 0: position
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_vertices)
+        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
 
-        # Bind and set the vertex colors
-        self.vbo_colors.bind()
-        shader_program.enableAttributeArray(1)  # Location 1: color
-        shader_program.setAttributeBuffer(1, GL.GL_FLOAT, 0, 3)
-        self.vbo_colors.release()
+        GL.glEnableVertexAttribArray(1) # Location 1: color
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo_colors)
+        GL.glVertexAttribPointer(1, 3, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
 
         # Draw the grid lines
         GL.glDrawArrays(GL.GL_LINES, 0, len(self.vertices) // 3)
 
-        # Release the VAO and shader program
-        self.vao.release()
-        shader_program.release()
+        # Disable vertex attribute arrays and unbind the VAO
+        GL.glDisableVertexAttribArray(0)
+        GL.glDisableVertexAttribArray(1)
+        GL.glBindVertexArray(0)
 
-    def cleanup(self):
-        """
-        Clean up OpenGL resources associated with the grid.
-        """
-        if self.vbo_vertices:
-            self.vbo_vertices.destroy()
-        if self.vbo_colors:
-            self.vbo_colors.destroy()
-        if self.vao:
-            self.vao.destroy()
+        # Unbind the shader program
+        GL.glUseProgram(0)
 
 class GLWidget(QtWidgets.QOpenGLWidget):
     RENDER_MODE_TO_GL_POLYGON = {
@@ -245,11 +258,10 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         self.zoom_level = 1.0  # Initial zoom level
         self.translation = QtGui.QVector3D(0.0, 0.0, 0.0)
         self.render_mode = RenderMode.FACE  # Default render mode
-        self.middle_button_pressed = False
 
-        # Initialize drawable objects
-        self.axes = Axes()
-        self.grid = Grid()
+        # Initialize visibility flags
+        self.show_axes = True
+        self.show_grid = True
 
         # Variables for the 3D model
         self.model_vbo_vertices = None
@@ -284,8 +296,8 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         self.program_model.link()
 
         # Initialize drawable objects
-        self.axes.initialize()
-        self.grid.initialize()
+        self.axes = Axes()
+        self.grid = Grid()
 
         # Load a model (replace with the path to your model file)
         self.load_model('example_models/cat_cartoon.glb')
@@ -358,6 +370,26 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         self.render_mode = mode
         self.update()
 
+    def set_show_axes(self, show: bool):
+        """
+        Set the visibility of the Axes.
+
+        Args:
+            show (bool): True to show Axes, False to hide.
+        """
+        self.show_axes = show
+        self.update()
+
+    def set_show_grid(self, show: bool):
+        """
+        Set the visibility of the Grid.
+
+        Args:
+            show (bool): True to show Grid, False to hide.
+        """
+        self.show_grid = show
+        self.update()
+
     def resizeGL(self, w, h):
         GL.glViewport(0, 0, w, h)
 
@@ -367,11 +399,13 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         model_matrix = self.get_model_matrix()
         camera_position = self.get_camera_position()
 
-        # Render axes
-        self.axes.render(self.program, mvp_matrix, model_matrix, camera_position)
+        # Render axes if enabled
+        if self.show_axes:
+            self.axes.render(self.program, mvp_matrix, model_matrix, camera_position)
 
-        # Render grid
-        self.grid.render(self.program, mvp_matrix, model_matrix, camera_position)
+        # Render grid if enabled
+        if self.show_grid:
+            self.grid.render(self.program, mvp_matrix, model_matrix, camera_position)
 
         # Render the model if loaded
         if self.model_loaded:
@@ -471,12 +505,9 @@ class GLWidget(QtWidgets.QOpenGLWidget):
         self.zoom_level += delta * zoom_factor
         self.zoom_level = max(0.1, self.zoom_level)  # Prevent zooming too close
 
+        # No need to update the grid based on zoom level anymore
         self.update()
 
-    def cleanup(self):
-        self.axes.cleanup()
-        self.grid.cleanup()
-        # Add cleanup for model if necessary
 
 vertex_shader_source = """
 #version 330 core
@@ -589,11 +620,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.gl_widget = GLWidget(self)
         self.setCentralWidget(self.gl_widget)
 
-        # Add UI elements for changing render modes
+        # Add UI elements for changing render modes and toggling Axes/Grid
         self.create_ui()
 
     def create_ui(self):
-        toolbar = QtWidgets.QToolBar()
+        toolbar = QtWidgets.QToolBar("Main Toolbar")
         self.addToolBar(toolbar)
 
         # Render mode actions
@@ -613,9 +644,34 @@ class MainWindow(QtWidgets.QMainWindow):
         hidden_line_action.triggered.connect(lambda: self.gl_widget.set_render_mode(RenderMode.HIDDEN_LINE))
         toolbar.addAction(hidden_line_action)
 
-    def closeEvent(self, event):
-        self.gl_widget.cleanup()
-        event.accept()
+        toolbar.addSeparator()
+
+        # Add toggle for Axes
+        self.axes_checkbox = QtWidgets.QCheckBox("Show Axes")
+        self.axes_checkbox.setChecked(True)
+        self.axes_checkbox.stateChanged.connect(self.toggle_axes)
+        toolbar.addWidget(self.axes_checkbox)
+
+        # Add toggle for Grid
+        self.grid_checkbox = QtWidgets.QCheckBox("Show Grid")
+        self.grid_checkbox.setChecked(True)
+        self.grid_checkbox.stateChanged.connect(self.toggle_grid)
+        toolbar.addWidget(self.grid_checkbox)
+
+    def toggle_axes(self, state):
+        """
+        Toggle the visibility of Axes based on checkbox state.
+        """
+        show = state == QtCore.Qt.Checked
+        self.gl_widget.set_show_axes(show)
+
+    def toggle_grid(self, state):
+        """
+        Toggle the visibility of Grid based on checkbox state.
+        """
+        show = state == QtCore.Qt.Checked
+        self.gl_widget.set_show_grid(show)
+
 
 if __name__ == '__main__':
     # Set up QSurfaceFormat for antialiasing
