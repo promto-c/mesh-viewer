@@ -9,3 +9,6 @@ class BlinnPhongShader(BaseShader):
 
 class LambertianShader(BaseShader):
     FRAGMENT_SHADER_FILE = SHADERS_ROOT / "glsl/lambertian_fragment_shader.glsl"
+
+class DisparityShader(BaseShader):
+    FRAGMENT_SHADER_FILE = SHADERS_ROOT / "glsl/disparity_fragment_shader.glsl"

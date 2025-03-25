@@ -3,10 +3,12 @@ import enum
 import numpy as np
 from PyQt5 import QtWidgets, QtGui, QtCore
 from OpenGL import GL
+import trimesh
 
 try:
     from pymeshlab import MeshSet, Mesh
-except:
+except ImportError:
+    # Placeholder implementations if pymeshlab is not available
     class MeshSet(list):
         ...
         def load_new_mesh(self, file_path):
@@ -17,7 +19,9 @@ except:
 
         # NOTE:
         def get_bounding_box(self):
-            min_x, max_x, min_y, max_y, min_z, max_z = float('inf'), float('-inf'), float('inf'), float('-inf'), float('inf'), float('-inf')
+            min_x, max_x = float('inf'), float('-inf')
+            min_y, max_y = float('inf'), float('-inf')
+            min_z, max_z = float('inf'), float('-inf')
 
             for mesh in self.meshes:  # Assuming the MeshSet stores a list of Mesh objects in self.meshes
                 mesh_min_x, mesh_max_x, mesh_min_y, mesh_max_y, mesh_min_z, mesh_max_z = mesh.get_bounding_box()
@@ -35,7 +39,7 @@ except:
     class Mesh:
         ...
 
-from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianShader
+from meshviewer.shaders.shader import PhongShader, BlinnPhongShader, LambertianShader, DisparityShader
 from meshviewer.utils.mesh_io import load_mesh_from_npz, load_mesh_from_pickle
 
 class RenderMode(enum.Enum):
@@ -43,7 +47,45 @@ class RenderMode(enum.Enum):
     FACE = enum.auto()
     POINT = enum.auto()
 
+def load_mesh_from_glb(file_path):
+    """Loads a GLB file using trimesh and converts it to a simple mesh object.
+    """
+    tmesh = trimesh.load(file_path, force='mesh')
+    # Define a simple mesh wrapper with the required interface.
+    class SimpleMesh:
+        def __init__(self, vertices, faces, normals):
+            self._vertices = vertices
+            self._faces = faces
+            self._normals = normals
+
+        def vertex_matrix(self):
+            return self._vertices
+
+        def vertex_normal_matrix(self):
+            return self._normals
+
+        def face_matrix(self):
+            return self._faces
+
+        def vertex_number(self):
+            return len(self._vertices)
+
+        def face_number(self):
+            return len(self._faces)
+
+    vertices = np.array(tmesh.vertices, dtype='float32')
+    faces = np.array(tmesh.faces, dtype='uint32')
+    # If trimesh did not compute normals, use zeros as a fallback.
+    if tmesh.vertex_normals is None or len(tmesh.vertex_normals) == 0:
+        normals = np.zeros_like(vertices, dtype='float32')
+    else:
+        normals = np.array(tmesh.vertex_normals, dtype='float32')
+
+    return SimpleMesh(vertices, faces, normals)
+
 class ObjectViewer(QtWidgets.QOpenGLWidget):
+    # Signal to emit the pixel RGB value as a tuple (R, G, B)
+    pixel_value_changed = QtCore.pyqtSignal(tuple)
 
     RENDER_MODE_TO_GL_POLYGON = {
         RenderMode.WIREFRAME: GL.GL_LINE,
@@ -56,7 +98,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     ROTATION_FACTOR = 0.5
     TRANSLATION_FACTOR = 0.01
 
-    def __init__(self, parent=None, mode: RenderMode = RenderMode.WIREFRAME):
+    def __init__(self, parent=None, mode: RenderMode = RenderMode.FACE):
         super().__init__(parent)
         self.mesh_set = MeshSet()  # Initialize an empty MeshSet
         self.scale = 1.0
@@ -79,12 +121,18 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader = None  # Placeholder for the PhongShader instance
 
         self.near_clip = 0.1
-        self.far_clip = 1000
+        self.far_clip = 1000.0
+
+        # Stereo parameters
+        self.eye_separation = 0.05
+        # view_mode options: 'left', 'right', 'stereo', 'anaglyph'
+        self.view_mode = 'stereo'
+        # Enable focus to capture key events.
+        self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
         self.shader = PhongShader()  # Initialize PhongShader
-        self.shader.create_shader_program()  # Compile and link shaders
         self.initBuffers()
 
     def set_mode(self, mode='wireframe'):
@@ -95,7 +143,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         """Adds a mesh to the viewer. The mesh can be a single Mesh object or a MeshSet.
         
         Parameters:
-            mesh (Mesh or MeshSet): The mesh or MeshSet to add.
+            mesh_input (Mesh or MeshSet): The mesh or MeshSet to add.
         """
         if isinstance(mesh_input, MeshSet):
             for mesh in mesh_input:
@@ -161,12 +209,15 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader.set_uniform("specularStrength", 0.5)
         self.shader.set_uniform("shininess", 32.0)
 
-    def setup_matrices(self):
+    def setup_matrices(self, eye_offset=0.0, viewport_width=None):
         projection = QtGui.QMatrix4x4()
-        projection.perspective(self.fov, self.width() / self.height(), self.near_clip, self.far_clip)
-
+        if viewport_width is None:
+            aspect = self.width() / self.height()
+        else:
+            aspect = viewport_width / self.height()
+        projection.perspective(self.fov, aspect, self.near_clip, self.far_clip)
         view = QtGui.QMatrix4x4()
-        view.translate(0, 0, -5.0)
+        view.translate(eye_offset, 0, -5.0)
 
         model = QtGui.QMatrix4x4()
         model.translate(self.translation_x, self.translation_y, self.translation_z)
@@ -200,17 +251,71 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
     def paintGL(self):
         self.clear_screen()
 
+        if self.view_mode == 'disparity':
+            shader = DisparityShader()
+        else:
+            shader = self.shader
+
         # Activate the shader program
-        self.shader.use()
+        shader.use()
 
-        # Set matrix uniforms
-        self.setup_matrices()
-        # Set light and material properties
-        self.set_fragment_shader_uniform()
+        # Switch rendering based on the current view_mode.
+        if self.view_mode == 'stereo':
+            total_width = self.width()
+            total_height = self.height()
+            half_width = total_width // 2
+            # Left eye viewport
+            GL.glViewport(0, 0, half_width, total_height)
+            self.setup_matrices(eye_offset=self.eye_separation / 2, viewport_width=half_width)
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+            GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
+            # Right eye viewport
+            GL.glViewport(half_width, 0, total_width - half_width, total_height)
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=total_width - half_width)
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+        elif self.view_mode == 'left':
+            GL.glViewport(0, 0, self.width(), self.height())
+            self.setup_matrices(eye_offset=self.eye_separation / 2, viewport_width=self.width())
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+        elif self.view_mode == 'right':
+            GL.glViewport(0, 0, self.width(), self.height())
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width())
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+        elif self.view_mode == 'anaglyph':
+            # Render left view in red channel only.
+            GL.glViewport(0, 0, self.width(), self.height())
+            GL.glColorMask(True, False, False, True)
+            self.setup_matrices(eye_offset=self.eye_separation / 2, viewport_width=self.width())
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+            GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
+            # Render right view in cyan (green+blue)
+            GL.glColorMask(False, True, True, True)
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width())
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
+            # Reset color mask
+            GL.glColorMask(True, True, True, True)
+        elif self.view_mode == 'disparity':
+            GL.glViewport(0, 0, self.width(), self.height())
+            self.setup_matrices(eye_offset=self.eye_separation / 2, viewport_width=self.width())
+            shader.set_uniform("eyeSeparation", self.eye_separation)
+            shader.set_uniform("nearClip", self.near_clip)
+            shader.set_uniform("farClip", self.far_clip)
+            shader.set_uniform("fov", self.fov)
+            self.render_meshes()
+        else:
+            # Default monoscopic view.
+            GL.glViewport(0, 0, self.width(), self.height())
+            self.setup_matrices(eye_offset=0.0, viewport_width=self.width())
+            self.set_fragment_shader_uniform()
+            self.render_meshes()
 
-        self.render_meshes()
-
-        self.shader.release()
+        shader.release()
 
     def resizeGL(self, width, height):
         GL.glViewport(0, 0, width, max(1, height))
@@ -272,9 +377,35 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
                 # Adjust translation base d on mouse movement
                 self.translation_x += dx * self.TRANSLATION_FACTOR
                 self.translation_y -= dy * self.TRANSLATION_FACTOR
+        # Update last mouse position.
+        self.last_mouse_position = event.pos()
+        self.update()
 
-            self.update()
-            self.last_mouse_position = event.pos()
+        # Read the pixel value under the mouse cursor.
+        x = event.x()
+        # Convert Qt mouse y (from top) to OpenGL y (from bottom)
+        y = self.height() - event.y()
+        # Read one pixel (RGB) from the current framebuffer as floats.
+        pixel = GL.glReadPixels(x, y, 1, 1, GL.GL_RGB, GL.GL_FLOAT)
+        # Convert the returned data to a tuple of floats.
+        rgb = tuple(np.frombuffer(pixel, dtype=np.float32))
+        # Emit the signal with the pixel's float RGB value.
+        self.pixel_value_changed.emit(rgb)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent):
+        key = event.key()
+        if key == QtCore.Qt.Key_1:
+            self.view_mode = 'left'
+        elif key == QtCore.Qt.Key_2:
+            self.view_mode = 'right'
+        elif key == QtCore.Qt.Key_3:
+            self.view_mode = 'stereo'
+        elif key == QtCore.Qt.Key_4:
+            self.view_mode = 'anaglyph'
+        elif key == QtCore.Qt.Key_5:
+            self.view_mode = 'disparity'
+        self.update()
+
 
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self, file_path: str):
@@ -284,21 +415,29 @@ class MainWindow(QtWidgets.QMainWindow):
         self.layout = QtWidgets.QVBoxLayout(self.central_widget)
 
         self.object_viewer = ObjectViewer()
-
+        # Connect the viewer's pixel_value_changed signal to update the status bar.
+        self.object_viewer.pixel_value_changed.connect(
+            lambda rgb: self.statusBar().showMessage(f"Pixel RGB: {rgb}")
+        )
         if file_path.endswith('.pkl'):
             mesh_data = load_mesh_from_pickle(file_path)
             self.object_viewer.add_mesh(mesh_data)
         elif file_path.endswith('.npz'):
             mesh_data = load_mesh_from_npz(file_path)
             self.object_viewer.add_mesh(mesh_data)
+        elif file_path.endswith('.glb'):
+            mesh = load_mesh_from_glb(file_path)
+            self.object_viewer.add_mesh(mesh)
         else:
             mesh_set = MeshSet()
             mesh_set.load_new_mesh(file_path)
             self.object_viewer.add_mesh(mesh_set)
             
         self.layout.addWidget(self.object_viewer)
-        self.setWindowTitle("Simple PyQt OBJ Viewer")
+        self.setWindowTitle("PyQt OBJ Viewer with Multiple Stereo Modes")
         self.resize(800, 600)
+        # Add a status bar to display pixel values.
+        self.setStatusBar(QtWidgets.QStatusBar(self))
 
 if __name__ == '__main__':
     # Set up QSurfaceFormat for antialiasing

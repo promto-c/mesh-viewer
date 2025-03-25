@@ -1,7 +1,6 @@
 import sys
 import enum
 import numpy as np
-import pymeshlab
 from PyQt5 import QtWidgets, QtGui, QtCore
 from OpenGL import GL
 
