@@ -31,6 +31,6 @@ void main() {
     // Pack the disparity: R,G = left-to-right disparity, B,A = right-to-left disparity
     disparityData = vec4(dispLtoR, dispRtoL);
     
-    // Use the left camera’s projection as the final vertex position.
+    // Use the left camera's projection as the final vertex position.
     gl_Position = posLeft;
 }

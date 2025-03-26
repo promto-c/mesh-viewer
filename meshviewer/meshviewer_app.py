@@ -305,12 +305,12 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glColorMask(True, True, True, True)
         elif self.view_mode == 'disparity':
             GL.glViewport(0, 0, self.width(), self.height())
-            
+
             # Build the projection matrix (common to both cameras)
             projection = QtGui.QMatrix4x4()
             aspect = self.width() / self.height()
             projection.perspective(self.fov, aspect, self.near_clip, self.far_clip)
-            
+
             # Build the model matrix (object transform)
             model = QtGui.QMatrix4x4()
             model.translate(self.translation_x, self.translation_y, self.translation_z)
@@ -318,21 +318,16 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             model.rotate(self.rotation_angle_y, 0, 1, 0)
             model.rotate(self.rotation_angle_z, 0, 0, 1)
             model.scale(self.scale)
-            
+
             # Left camera: simple translation by half the eye separation.
             leftView = QtGui.QMatrix4x4()
             leftView.translate(self.eye_separation / 2, 0, -5.0)
-            
+
             # Right camera: translation in the opposite direction and apply extra rotation.
             rightView = QtGui.QMatrix4x4()
             rightView.translate(-self.eye_separation / 2, 0, -5.0)
             rightView.rotate(self.second_camera_angle, 0, 1, 0)
-            
-            # Activate the disparity shader.
-            # We assume self.disparity_shader is an instance of a shader class that loads
-            # the vertex shader "disparity_vertex_shader.glsl" and fragment shader "disparity_fragment_shader.glsl"
-            # shader.use()
-            
+
             # Set uniforms: model, left and right view matrices, projection and screen size.
             shader.set_uniform("model", model.data())
             shader.set_uniform("leftView", leftView.data())
