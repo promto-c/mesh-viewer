@@ -23,7 +23,7 @@ except ImportError:
             min_y, max_y = float('inf'), float('-inf')
             min_z, max_z = float('inf'), float('-inf')
 
-            for mesh in self.meshes:  # Assuming the MeshSet stores a list of Mesh objects in self.meshes
+            for mesh in self.meshes:
                 mesh_min_x, mesh_max_x, mesh_min_y, mesh_max_y, mesh_min_z, mesh_max_z = mesh.get_bounding_box()
 
                 # Update the overall bounding box
@@ -124,15 +124,16 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.far_clip = 1000.0
 
         # Stereo parameters
-        self.eye_separation = 0.05
-        # view_mode options: 'left', 'right', 'stereo', 'anaglyph'
+        self.eye_separation = 0.05  # Default separation.
+        # Additional rotation for the second (right) camera.
+        self.second_camera_angle = 0.0
         self.view_mode = 'stereo'
         # Enable focus to capture key events.
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
 
     def initializeGL(self):
         GL.glEnable(GL.GL_DEPTH_TEST)
-        self.shader = PhongShader()  # Initialize PhongShader
+        self.shader = PhongShader()
         self.initBuffers()
 
     def set_mode(self, mode='wireframe'):
@@ -203,13 +204,13 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         self.shader.set_uniform("viewPos", (0.0, 0.0, 0.0))
         # Set light and object colors
         self.shader.set_uniform("lightColor", (1.0, 1.0, 1.0))
-        self.shader.set_uniform("objectColor", (1.0, 0.5, 0.31))
+        self.shader.set_uniform("objectColor", (1.0, 1.0, 1.0))
         # Set material properties
         self.shader.set_uniform("ambientStrength", 0.1)
         self.shader.set_uniform("specularStrength", 0.5)
         self.shader.set_uniform("shininess", 32.0)
 
-    def setup_matrices(self, eye_offset=0.0, viewport_width=None):
+    def setup_matrices(self, eye_offset=0.0, viewport_width=None, angle_adjust=0.0):
         projection = QtGui.QMatrix4x4()
         if viewport_width is None:
             aspect = self.width() / self.height()
@@ -218,7 +219,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
         projection.perspective(self.fov, aspect, self.near_clip, self.far_clip)
         view = QtGui.QMatrix4x4()
         view.translate(eye_offset, 0, -5.0)
-
+        # Apply an additional rotation (e.g. for right eye) if needed.
+        if angle_adjust:
+            view.rotate(angle_adjust, 0, 1, 0)
         model = QtGui.QMatrix4x4()
         model.translate(self.translation_x, self.translation_y, self.translation_z)
         model.rotate(self.rotation_angle_x, 1, 0, 0)
@@ -270,9 +273,9 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             self.set_fragment_shader_uniform()
             self.render_meshes()
             GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
-            # Right eye viewport
+            # Right eye viewport with additional angle adjustment
             GL.glViewport(half_width, 0, total_width - half_width, total_height)
-            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=total_width - half_width)
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=total_width - half_width, angle_adjust=self.second_camera_angle)
             self.set_fragment_shader_uniform()
             self.render_meshes()
         elif self.view_mode == 'left':
@@ -282,7 +285,7 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             self.render_meshes()
         elif self.view_mode == 'right':
             GL.glViewport(0, 0, self.width(), self.height())
-            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width())
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width(), angle_adjust=self.second_camera_angle)
             self.set_fragment_shader_uniform()
             self.render_meshes()
         elif self.view_mode == 'anaglyph':
@@ -295,18 +298,49 @@ class ObjectViewer(QtWidgets.QOpenGLWidget):
             GL.glClear(GL.GL_DEPTH_BUFFER_BIT)
             # Render right view in cyan (green+blue)
             GL.glColorMask(False, True, True, True)
-            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width())
+            self.setup_matrices(eye_offset=-self.eye_separation / 2, viewport_width=self.width(), angle_adjust=self.second_camera_angle)
             self.set_fragment_shader_uniform()
             self.render_meshes()
             # Reset color mask
             GL.glColorMask(True, True, True, True)
         elif self.view_mode == 'disparity':
             GL.glViewport(0, 0, self.width(), self.height())
-            self.setup_matrices(eye_offset=self.eye_separation / 2, viewport_width=self.width())
-            shader.set_uniform("eyeSeparation", self.eye_separation)
-            shader.set_uniform("nearClip", self.near_clip)
-            shader.set_uniform("farClip", self.far_clip)
-            shader.set_uniform("fov", self.fov)
+            
+            # Build the projection matrix (common to both cameras)
+            projection = QtGui.QMatrix4x4()
+            aspect = self.width() / self.height()
+            projection.perspective(self.fov, aspect, self.near_clip, self.far_clip)
+            
+            # Build the model matrix (object transform)
+            model = QtGui.QMatrix4x4()
+            model.translate(self.translation_x, self.translation_y, self.translation_z)
+            model.rotate(self.rotation_angle_x, 1, 0, 0)
+            model.rotate(self.rotation_angle_y, 0, 1, 0)
+            model.rotate(self.rotation_angle_z, 0, 0, 1)
+            model.scale(self.scale)
+            
+            # Left camera: simple translation by half the eye separation.
+            leftView = QtGui.QMatrix4x4()
+            leftView.translate(self.eye_separation / 2, 0, -5.0)
+            
+            # Right camera: translation in the opposite direction and apply extra rotation.
+            rightView = QtGui.QMatrix4x4()
+            rightView.translate(-self.eye_separation / 2, 0, -5.0)
+            rightView.rotate(self.second_camera_angle, 0, 1, 0)
+            
+            # Activate the disparity shader.
+            # We assume self.disparity_shader is an instance of a shader class that loads
+            # the vertex shader "disparity_vertex_shader.glsl" and fragment shader "disparity_fragment_shader.glsl"
+            # shader.use()
+            
+            # Set uniforms: model, left and right view matrices, projection and screen size.
+            shader.set_uniform("model", model.data())
+            shader.set_uniform("leftView", leftView.data())
+            shader.set_uniform("rightView", rightView.data())
+            shader.set_uniform("projection", projection.data())
+            shader.set_uniform("screenSize", (float(self.width()), float(self.height())))
+
+            # Render the meshes (the vertex shader will compute the disparity).
             self.render_meshes()
         else:
             # Default monoscopic view.
@@ -432,23 +466,57 @@ class MainWindow(QtWidgets.QMainWindow):
             mesh_set = MeshSet()
             mesh_set.load_new_mesh(file_path)
             self.object_viewer.add_mesh(mesh_set)
-            
+
         self.layout.addWidget(self.object_viewer)
-        self.setWindowTitle("PyQt OBJ Viewer with Multiple Stereo Modes")
+
+        # --- Add two sliders for stereo adjustments ---
+        slider_widget = QtWidgets.QWidget()
+        slider_widget.setMaximumHeight(46)
+        slider_layout = QtWidgets.QHBoxLayout(slider_widget)
+
+        # Slider for eye separation (offset)
+        self.eye_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.eye_slider.setRange(0, 100)
+        self.eye_slider.setValue(50)  # 50 corresponds to 0.05 separation
+        self.eye_slider.setToolTip("Adjust Eye Separation")
+        self.eye_slider.valueChanged.connect(self.update_eye_separation)
+        slider_layout.addWidget(QtWidgets.QLabel("Eye Separation"))
+        slider_layout.addWidget(self.eye_slider)
+
+        # Slider for second (right) camera angle adjustment (in degrees)
+        self.angle_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.angle_slider.setRange(-45, 45)
+        self.angle_slider.setValue(0)
+        self.angle_slider.setToolTip("Adjust Right Camera Angle")
+        self.angle_slider.valueChanged.connect(self.update_second_camera_angle)
+        slider_layout.addWidget(QtWidgets.QLabel("Right Camera Angle"))
+        slider_layout.addWidget(self.angle_slider)
+
+        self.layout.addWidget(slider_widget)
+        # ------------------------------
+
+        self.setWindowTitle("PyQt OBJ Viewer")
         self.resize(800, 600)
         # Add a status bar to display pixel values.
         self.setStatusBar(QtWidgets.QStatusBar(self))
 
+    def update_eye_separation(self, value):
+        # Map slider value (0-100) to eye separation (0.0 to 0.1)
+        self.object_viewer.eye_separation = (value / 100) * 0.1
+        self.object_viewer.update()
+
+    def update_second_camera_angle(self, value):
+        # Directly use the slider value (degrees) for the additional rotation.
+        self.object_viewer.second_camera_angle = float(value)
+        self.object_viewer.update()
+
 if __name__ == '__main__':
-    # Set up QSurfaceFormat for antialiasing
     format = QtGui.QSurfaceFormat()
-    format.setSamples(4)  # Set the number of samples for multisampling
+    format.setSamples(4)
     format.setDepthBufferSize(24)
     QtGui.QSurfaceFormat.setDefaultFormat(format)
 
     app = QtWidgets.QApplication(sys.argv)
-
-    # mainWindow = MainWindow('mesh_data.npz')
-    mainWindow = MainWindow('example_models/cat.glb')
+    mainWindow = MainWindow('example_models/racoon_m.glb')
     mainWindow.show()
     sys.exit(app.exec_())
